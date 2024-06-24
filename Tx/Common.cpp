@@ -1,0 +1,111 @@
+/* This program is published under the GNU General Public License. 
+ * This program is free software and you can redistribute it and/or modify it under the terms
+ * of the GNU General  Public License as published by the Free Software Foundation, version 3.
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY.
+ * See the GNU General Public License for more details : https://www.gnu.org/licenses/ *GPL 
+ *
+ * Installation, usage : https://github.com/rigou/nRF24L01-FHSS/
+*/
+
+#include "Common.h"
+#include "Gpio.h"
+#include <bootloader_random.h> // for GetRandomInt32()
+
+// Blink the led, non blocking call : call it repeatedly
+// this function can deal only with a single led
+// period : time the led is on + time the led is off, in ms
+// time_on : time the led is on, in ms
+// restart : true=start a new period and turn on the led immediately else simply refresh its state
+void BlinkLed(byte led_gpio, unsigned int period, unsigned int time_on, bool restart) {
+	//Serial.printf("BlinkLed(%d, %d, %d, %d)\n", led_gpio, period, time_on, restart);
+	if (led_gpio) {
+		static unsigned long Begin_time=0;
+		static bool led_state=LOW;
+
+		unsigned long time_now=millis();
+		time_on=min(time_on, period);
+
+		if (restart)
+			Begin_time=0;
+
+		if (time_now > Begin_time+period && led_state==LOW) {
+			Begin_time=time_now; // start a new period
+			digitalWrite(led_gpio, HIGH);
+			led_state=HIGH;
+			//Serial.printf("BlinkLed %d: now %lu, begin %lu, period %d : HIGH\n", led_gpio, time_now, Begin_time, period);
+		}
+		if (time_now > Begin_time+time_on && led_state==HIGH) {
+			digitalWrite(led_gpio, LOW);
+			led_state=LOW;
+			//Serial.printf("BlinkLed %d: now %lu, begin %lu, time_on %d : LOW\n", led_gpio, time_now, Begin_time, time_on);
+		}
+	}
+}
+
+// Flash the led once, non blocking call : call it repeatedly
+// this function can deal only with a single led
+// time_on : time the led is on, in ms, optional
+// if time_on is given then turn on the led immediately else simply refresh its state
+void FlashLed(byte led_gpio, unsigned int time_on) {
+	if (led_gpio) {
+		static unsigned long End_time=0;
+		static bool led_state=LOW;
+
+		unsigned long time_now=millis();
+		if (time_on && led_state==LOW) {
+			End_time=time_now+time_on;
+			digitalWrite(led_gpio, HIGH);
+			led_state=HIGH;
+		}
+		else if (time_now > End_time && led_state==HIGH) {
+			digitalWrite(led_gpio, LOW);
+			led_state=LOW;
+		}
+	}
+}
+
+// reset MCU or hold program in infinite loop after fatal error
+void EndProgram(bool reset) {
+	if (reset) {
+        Serial.println("Reset");
+		ESP.restart();
+		// this point is never reached
+	}
+	else {
+		const int HALTED_DELAY=10000; // ms
+		while (1) {
+			Serial.println("Program halted");
+			if (ERRLED) {
+				for (int idx=0; idx<3; idx++) {
+					digitalWrite(ERRLED, HIGH);
+					delay(2000);
+					digitalWrite(ERRLED, LOW);
+					delay(2000);
+				}
+			}
+			else
+				delay(HALTED_DELAY*1000);
+		}
+	}
+}
+
+// get a secure random number from the ESP32 hardware random number generator
+// returns a 32 bits random integer suitable for a secret key in the range 1-4294967295
+// requires #include <bootloader_random.h>
+uint32_t GetRandomInt32(void) {
+	uint32_t retval=0;
+	bootloader_random_enable();
+	// do not return zero
+	while (retval==0)
+		retval=esp_random();
+	bootloader_random_disable();
+	return retval;
+}
+
+// get a secure random number from the ESP32 hardware random number generator
+// returns a 16 bits random integer suitable for a secret key in the range 1-65535
+// requires #include <bootloader_random.h>
+uint16_t GetRandomInt16(void) {
+	return GetRandomInt32() & 0xffff;
+}
+
