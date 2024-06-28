@@ -7,6 +7,12 @@
  * Installation, usage : https://github.com/rigou/nRF24L01-FHSS/
 */
 
+/******************************************************************************
+* WARNING: This file is part of the nRF24L01-FHSS project base code
+* and user should not modify it. Any user code stored in this file could be
+* made inoperable by subsequent releases of the project.
+******************************************************************************/
+
 #include "Common.h"
 #include "Gpio.h"
 #include "Settings.h"
@@ -18,7 +24,7 @@ Settings Settings_obj;
 Transceiver Transceiver_obj;
 
 #define APP_NAME "Rx"
-#define APP_VERSION "1.6.0"
+#define APP_VERSION "1.6.2"
 
 // Debug stuff
 //
@@ -37,7 +43,7 @@ Transceiver Transceiver_obj;
 enum RxStates {SYNCHRONIZING, MONOFREQ, MULTIFREQ};
 RxStates Rx_state=SYNCHRONIZING; // while PairingInProgress state MULTIFREQ is never reached 
 
-bool RunLedEnabled=(RUNLED!=0); // true by default, false when the Pairing button is pressed
+bool RunLedEnabled=(RUNLED_GPIO!=0); // true by default, false when the Pairing button is pressed
 
 uint16_t Ack_message[Transceiver::ACKVALUES];
 uint16_t Ack_type=Transceiver::DGT_SERVICE;
@@ -50,26 +56,26 @@ micros_t RebootTime=0; // we'll reboot at this moment, after pairing is complete
     
 // while MONOFREQ, we will send SYNACKNUMBER ack datagrams informing Tx that we are synchronized,
 // then we will transition to MULTIFREQ after sending the last of them.
-const byte SYNACKNUMBER=64;
+const uint8_t SYNACKNUMBER=64;
+
+// #define SCOPE_GPIO 17 // the oscilloscope probe
 
 void setup() {
     Serial.begin(115200);
     while (!Serial) ; // wait for serial port to connect
-	//Serial.print('\n'); for (int idx = 0; idx<4; idx++) { Serial.print((char)('A'+idx)); delay(500); } // debug
+	//Serial.print('\n'); for (uint8_t idx = 0; idx<4; idx++) { Serial.print((char)('A'+idx)); delay(500); } // debug
     Serial.printf("\n\n%s %s\n", APP_NAME, APP_VERSION);
 
     // pinMode(SCOPE_GPIO, OUTPUT);
     pinMode(PAIRING_GPIO, INPUT_PULLUP);
-    if (RUNLED)
-        pinMode(RUNLED, OUTPUT);
-    if (ERRLED)
-        pinMode(ERRLED, OUTPUT);
-    if (TESTLED)
-        pinMode(TESTLED, OUTPUT);
+    if (RUNLED_GPIO)
+        pinMode(RUNLED_GPIO, OUTPUT);
+    if (ERRLED_GPIO)
+        pinMode(ERRLED_GPIO, OUTPUT);
 
     // Open the settings file, create it if it does not exist
     // default values are provided only for creating the settings file
-    if (Settings_obj.Init(PAIRING_GPIO, RUNLED, Transceiver::DEF_TXID, Transceiver::DEF_MONOCHAN, Transceiver::DEF_PALEVEL)!=0)
+    if (Settings_obj.Init(PAIRING_GPIO, RUNLED_GPIO, Transceiver::DEF_TXID, Transceiver::DEF_MONOCHAN, Transceiver::DEF_PALEVEL)!=0)
         EndProgram(false); // halt command
 
     // read the transceiver settings
@@ -93,7 +99,7 @@ void loop() {
     // if (Transceiver_obj.Radio_obj.available())
     //     digitalWrite(SCOPE_GPIO, HIGH);
 
-    byte result=receive();
+    uint8_t result=receive();
     // digitalWrite(SCOPE_GPIO, LOW);
 
     if (result==0) { // 0=received a DGT_USER datagram
@@ -106,19 +112,21 @@ void loop() {
     
     if (Rx_state==MULTIFREQ) {
         if (RunLedEnabled)
-            BlinkLed(RUNLED, 1000, 20, false);
+            BlinkLed(RUNLED_GPIO, 1000, 20, false);
         if (result==3)
-            FlashLed(ERRLED, 20); // turn on ERRLED
+            FlashLed(ERRLED_GPIO, 20); // turn on ERRLED_GPIO
         else
-            FlashLed(ERRLED); // refresh ERRLED
+            FlashLed(ERRLED_GPIO); // refresh ERRLED_GPIO
     }
     else {
         if (RunLedEnabled) {
             if (PairingInProgress)
-                BlinkLed(RUNLED, 3000, 1000, false);
+                BlinkLed(RUNLED_GPIO, 3000, 1000, false);
             else
-                BlinkLed(RUNLED, 100, 50, false);
+                BlinkLed(RUNLED_GPIO, 100, 50, false);
         }
+        if (result==2 && ERRLED_GPIO)
+            digitalWrite(ERRLED_GPIO, HIGH);
     }
     if (RebootTime && millis()>=RebootTime) {
         Serial.println("Delayed reboot after pairing");
@@ -130,34 +138,41 @@ void loop() {
 // Return values: 
 //  0=received a user datagram
 //  1=received a service datagram
-//  2=not ready to receive - you must call this function only when Rx_state==MONOFREQ or Rx_state==MULTIFREQ
+//  2=synchronization in progress
 //  3=missed a datagram (timeout)
-byte receive(void) {
-    byte retval=2;
-    // next datagram will arrive between Next_Eta and Next_Eta+Avg_Datagram_Period
-    // Next_Eta is the moment where we switch to next radio channel
+uint8_t receive(void) {
+    uint8_t retval=2;
+    // next datagram will arrive between Next_Eta_us and Next_Eta_us+Avg_Datagram_Period
+    // Next_Eta_us is the moment where we switch to next radio channel
     bool received=false;
     bool timeout=false;
-    static micros_t Next_Eta=0;
+    static micros_t Next_Eta_us=0;
     static uint16_t Prev_number=0;
     static uint16_t Multifreq_number=0; // we'll start frequency hopping *after* receiving this datagram
     static uint16_t Reset_counter=0;  // number of consecutive missing datagrams while MULTIFREQ: we reset the MCU if this counter reaches 100
-    static unsigned long Stat_time=0; // to compute error statistics every second
+    static unsigned long Stat_time_ms=0; // to compute error statistics every second
+    static unsigned long Last_signal_time_ms=millis(); // to print "no signal" warning every second
     static uint16_t Error_counter=0;  // number of missing datagrams per second, updated once/second
-
-    if (Rx_state!=SYNCHRONIZING) {
+    
+    unsigned long time_now_ms=millis();
+    if (Rx_state==SYNCHRONIZING) {
+        if (time_now_ms >= Last_signal_time_ms+1000) {
+            Serial.println("no signal");
+            Last_signal_time_ms=time_now_ms;
+        }
+    }
+    else {
         // clear error statistics every second
-        if (Stat_time && millis() >= Stat_time+1000) {
+        if (Stat_time_ms && time_now_ms >= Stat_time_ms+1000) {
             if (Rx_state==MULTIFREQ && Transceiver_obj.Avg_Datagram_Period) {
                 ErrorCounter=Error_counter; // update the global ErrorCounter once/second
                 Error_counter=0;
-                Stat_time=millis();
+                Stat_time_ms=time_now_ms;
             }
         }
     }
     
-    micros_t time_now=micros();
-
+    micros_t time_now_us=micros();
     if (Transceiver_obj.Receive(Ack_type, Ack_message)) {
         memset(Ack_message, 0, sizeof(Ack_message));
         if (Rx_state==SYNCHRONIZING) {
@@ -170,6 +185,7 @@ byte receive(void) {
             }
             retval=2;
         }
+        Last_signal_time_ms=time_now_ms; // to print "no signal" warning every second 
         received=true;
     }
 #if defined(DEBUG_PRINT_MSG_DATAGRAMS) || defined(DEBUG_PRINT_ACK_DATAGRAMS)
@@ -188,14 +204,14 @@ byte receive(void) {
 #endif
     // check actions on the Pairing button
     if (Rx_state==SYNCHRONIZING) { // else already paired
-        BtnStates btn_state=ReadBtn(PAIRING_GPIO, RUNLED, 1500);
+        BtnStates btn_state=ReadBtn(PAIRING_GPIO, RUNLED_GPIO, 1500);
         RunLedEnabled=(btn_state==BTN_RELEASED); // if btn_state==BTN_PRESSED then read_button() will control the Led
         if (btn_state==BTN_REACHED_DURATION) {
             // blink led for 3 seconds to tell user that he can release the button
             unsigned long stop_time=millis()+3000;
             while (millis()<stop_time)
-                BlinkLed(RUNLED, 100, 50, false);
-            digitalWrite(RUNLED, LOW);
+                BlinkLed(RUNLED_GPIO, 100, 50, false);
+            digitalWrite(RUNLED_GPIO, LOW);
 
             // reconfigure the transceiver for pairing
             Serial.println("Pairing");
@@ -207,7 +223,7 @@ byte receive(void) {
     
     if (Rx_state==MONOFREQ || Rx_state==MULTIFREQ) {
         if (received) {
-            Next_Eta=time_now+Transceiver_obj.Avg_Datagram_Period;
+            Next_Eta_us=time_now_us+Transceiver_obj.Avg_Datagram_Period;
             Prev_number=Transceiver_obj.Msg_Datagram.number;
             if (Rx_state==MONOFREQ) {
                 Ack_type=Transceiver::DGT_SERVICE | Transceiver::DGT_SYNCHRONIZED;
@@ -224,19 +240,19 @@ byte receive(void) {
                 Reset_counter=0;
             }
         }
-        else if (time_now>=Next_Eta+(Transceiver_obj.Avg_Datagram_Period/2)) {
-            //Serial.printf("Mis: n=%05u, timeout=%d\n", expected_number, time_now-Next_Eta);
+        else if (time_now_us>=Next_Eta_us+(Transceiver_obj.Avg_Datagram_Period/2)) {
+            //Serial.printf("Mis: n=%05u, timeout=%d\n", expected_number, time_now_us-Next_Eta_us);
             if (Rx_state==MULTIFREQ) {
                 // reset if we counted 100 consecutive missing datagrams (Tx was turned off ?)
                 Reset_counter++;
                 if (Reset_counter==100) {
                     //Settings_obj.Save();
-                    Serial.println("Reboot after 100 consecutive missing datagrams");
+                    Serial.println("Reboot after 100 consecutive missed datagrams");
                     EndProgram(true); // reset command
                 }
             }
-            // timeout : increment Next_Eta blindly
-            Next_Eta+=Transceiver_obj.Avg_Datagram_Period;
+            // timeout : increment Next_Eta_us blindly
+            Next_Eta_us+=Transceiver_obj.Avg_Datagram_Period;
             Prev_number++;
             Error_counter++;
             timeout=true;
@@ -304,7 +320,7 @@ byte receive(void) {
                     Serial.printf("MULTIFREQ after %lu ms, period=%lu µs\n", millis(), Transceiver_obj.Avg_Datagram_Period);
                     // assign values to the array of radio channels
                     Transceiver_obj.AssignChannels();
-                    Stat_time=millis(); // to compute error statistics every second 
+                    Stat_time_ms=millis(); // to compute error statistics every second
                 }
             }
             

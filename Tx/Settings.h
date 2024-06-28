@@ -7,6 +7,12 @@
  * Installation, usage : https://github.com/rigou/nRF24L01-FHSS/
 */
 
+/******************************************************************************
+* WARNING: This file is part of the nRF24L01-FHSS project base code
+* and user should not modify it. Any user code stored in this file could be
+* made inoperable by subsequent releases of the project.
+******************************************************************************/
+
 #pragma once
 #include <rgParam.h>
 
@@ -24,12 +30,12 @@ class Settings : public rgParam {
 		//~ int Dump(int buffer_size_int, char *buffer_out_str); // copy the raw contents of the file into buffer
 		//~ void SerialDump(void);
 
-		static const byte NO_BUTTON=255;
+		static const uint8_t NO_BUTTON=255;
 		
-	    int Init(byte button_gpio, byte led_gpio, 
+	    int Init(uint8_t button_gpio, uint8_t led_gpio, 
 		uint16_t default_tx_deviceid, 
-		byte default_mono_chan, 
-		byte default_pa_level); // overloaded
+		uint8_t default_mono_chan, 
+		uint8_t default_pa_level); // overloaded
 
 		int GetDeviceId(void);
 		bool SetDeviceId(int value);

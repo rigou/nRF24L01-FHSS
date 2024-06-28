@@ -14,11 +14,14 @@ void UserSetup(void);
 void UserLoopMsg(uint16_t *message);
 void UserLoopAck(uint16_t *message);
 
-// Add user code after this line ------------------------------------------
-// Example code: we use 3 servos and 2 Leds, controled by 3 potentiometers and 2 switches on the transmitter
+// User may add code after this line ------------------------------------------
+
+// Example code: we use 4 servos and 2 Leds, controled by 4 potentiometers and 2 switches on the transmitter
+// we have set COM_MSGVALUES and COM_ACKVALUES accordingly in the "Global settings" section of Common.h
 
 #define USR_CHAN1_GPIO 32 // connected to Servo #1
 #define USR_CHAN2_GPIO 33 // connected to Servo #2
 #define USR_CHAN3_GPIO 25 // connected to Servo #3
-#define USR_CHAN4_GPIO 26 // connected to Led1
-#define USR_CHAN5_GPIO 27 // connected to Led2
+#define USR_CHAN4_GPIO 26 // connected to Servo #4
+#define USR_CHAN5_GPIO 27 // connected to Led1
+#define USR_CHAN6_GPIO 17 // connected to Led2

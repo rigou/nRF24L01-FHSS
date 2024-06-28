@@ -7,6 +7,12 @@
  * Installation, usage : https://github.com/rigou/nRF24L01-FHSS/
 */
 
+/******************************************************************************
+* WARNING: This file is part of the nRF24L01-FHSS project base code
+* and user should not modify it. Any user code stored in this file could be
+* made inoperable by subsequent releases of the project.
+******************************************************************************/
+
 #include <bootloader_random.h>
 #include "Gpio.h"
 #include "Transceiver.h"
@@ -45,10 +51,10 @@ bool Transceiver::Config(bool is_tx, uint16_t tx_device_id, uint16_t mono_channe
 	Radio_obj.setCRCLength(RF24_CRC_16); // 16 bits is the default but let's be explicit
 
 	// The transmission data rate affects the range and the transmission error rate
-	// Higher data rates give shorter range and more errors or more retransmission attempts, and increase the power supply requirement
+	// Higher data rates give shorter range and more errors or more retransmission attempts, and increase the power supply current
 	// nRF24L01Plus Supply current at RF24_250KBPS: 12.6 mA
-	// values: RF24_250KBPS, RF24_1MBPS, RF24_2MBPS
-	Radio_obj.setDataRate(RF24_250KBPS);
+	rf24_datarate_e rates[]={RF24_250KBPS, RF24_1MBPS, RF24_2MBPS};
+	Radio_obj.setDataRate(rates[COM_DATARATE]);
 
 	// Auto retransmission:
 	//  The RF24 chip is capable to retransmit MSG datagrams ART_ATTEMPTS times
@@ -56,16 +62,15 @@ bool Transceiver::Config(bool is_tx, uint16_t tx_device_id, uint16_t mono_channe
 	//
 	// ART_DELAY:
 	// 	This delay is critical it must be larger than the normal MSG datagram transmission time + ACK datagram receiving time
-	// 	ART_DELAY: 1=500µs, 2=750µs, 3=1000µs, 5=1500µs, 6=1750µs, 7=2000µs, 8=2250µs, 9=2500µs, 11=3000µs, 12=3250µs, 13=3500µs, 14=3750µs, 15=4000µs
-	// 	ART_DELAY=3 is ok for DGPERIOD=10000,  MSGVALUES=10 ACKVALUES=5 CPUFREQ=80 DATARATE=250K
-	const byte ART_DELAY=3;
+	// 	ART_DELAY: 0=250µs, 1=500µs, 2=750µs, 3=1000µs, 4=1250µ, 5=1500µs, ... 15=4000µs
+	const uint8_t ART_DELAY=COM_ART_DELAY;
 	//
 	// ART_ATTEMPTS:
-	// 	To reduce the transmission error rate, set ART_ATTEMPTS (ART=auto retransmission) between 1 and ?
-	// 	 take into account each retransmission will take take ART_DELAY µs, reducing the time available for your application data processing
+	// 	To reduce the transmission error rate, set ART_ATTEMPTS (ART=auto retransmission) between 1 and 15
+	// 	 take into account each retransmission will take ART_DELAY µs, reducing the time available for your application data processing
 	//	 and obviously ART_DELAY(µs) * ART_ATTEMPTS must be smaller than DGPERIOD
 	// 	Alternatively, if transmission errors are acceptable then set ART_ATTEMPTS=0 to disable auto retransmission entirely
-	const byte ART_ATTEMPTS=0;
+	const uint8_t ART_ATTEMPTS=COM_ART_ATTEMPTS;
 	//
 	Radio_obj.setRetries(ART_DELAY, ART_ATTEMPTS);  
 
@@ -142,7 +147,7 @@ bool Transceiver::Send(uint16_t msg_type, uint16_t *message) {
 	memcpy(Msg_Datagram.message, message, sizeof(Msg_Datagram.message));
 
 	// write() blocks until the message is successfully acknowledged by the receiver or the timeout/retransmit maxima are reached
-	byte pipe; // pipe number that received the ACK datagram
+	uint8_t pipe; // pipe number that received the ACK datagram
 	Radio_obj.write(&Msg_Datagram, sizeof(Msg_Datagram));
 	if (Radio_obj.available(&pipe))
 		Radio_obj.read(&Ack_Datagram, sizeof(Ack_Datagram));  // read incoming ACK datagram
@@ -185,7 +190,7 @@ bool Transceiver::Receive(uint16_t ack_type, uint16_t *ack_message) {
 // - this method ignores the first AVG_COUNT received datagrams
 // - Once Avg_Datagram_Period is computed, Rx transitions from SYNCHRONIZING to MONOFREQ
 void Transceiver::compute_avg_datagram_period(void) {
-	static const byte AVG_COUNT=32;
+	static const uint8_t AVG_COUNT=32;
 	static micros_t First_datagram_time=0;
 	static uint16_t First_datagram_number=Msg_Datagram.number;
 	static uint16_t Previous_datagram_number=Msg_Datagram.number-1;
@@ -202,19 +207,20 @@ void Transceiver::compute_avg_datagram_period(void) {
 		// missed a datagram : restart avg computation
 		First_datagram_time=0;
 		First_datagram_number=Msg_Datagram.number;
+		Serial.println("synchronizing");
 	}
 	Previous_datagram_number=Msg_Datagram.number;
 }
 
 void Transceiver::PrintMsgDatagram(MsgDatagram datagram) {
 	Serial.printf("%04x T%x ", datagram.number, datagram.type);
-	for (int idx=0; idx<MSGVALUES; idx++)
+	for (uint8_t idx=0; idx<MSGVALUES; idx++)
 		Serial.printf("x%04x ", datagram.message[idx]);
 }
 
 void Transceiver::PrintAckDatagram(AckDatagram datagram) {
 	Serial.printf("%04x T%x ", datagram.number, datagram.type);
-	for (int idx=0; idx<ACKVALUES; idx++)
+	for (uint8_t idx=0; idx<ACKVALUES; idx++)
 		Serial.printf("x%04x ", datagram.message[idx]);
 }
 
@@ -223,14 +229,14 @@ void Transceiver::PrintAckDatagram(AckDatagram datagram) {
 // key is used to seed the RNG
 void Transceiver::arrange_values(
 	const unsigned int key, 
-	const byte max_value, 
-	const byte ignored_value1, 
-	const byte ignored_value2,
-	const byte sizeof_values_out,
-	byte *values_out) {
+	const uint8_t max_value, 
+	const uint8_t ignored_value1, 
+	const uint8_t ignored_value2,
+	const uint8_t sizeof_values_out,
+	uint8_t *values_out) {
 
-    const byte NO_VALUE=255;
-	const byte all_values=sizeof_values_out+2; // 2 possible values in the range 0-max_value will be ignored
+    const uint8_t NO_VALUE=255;
+	const uint8_t all_values=sizeof_values_out+2; // 2 possible values in the range 0-max_value will be ignored
 	bool available_values[all_values]; // 2 possible values in the range 0-max_value will be ignored
     int idx=0;
 	
@@ -246,7 +252,7 @@ void Transceiver::arrange_values(
 	Random_obj.Seed(key);
     for (idx=0; idx<sizeof_values_out; idx++) {
         while (values_out[idx]==NO_VALUE) {
-            byte rnd_value=Random_obj.Next(max_value+1); // pseudo-random value in the range (0, max_value)
+            uint8_t rnd_value=Random_obj.Next(max_value+1); // pseudo-random value in the range (0, max_value)
             if (available_values[rnd_value]) {
                 available_values[rnd_value]=false;
 				values_out[idx]=rnd_value;
@@ -261,7 +267,7 @@ void Transceiver::AssignChannels(void) {
 	arrange_values(GetSessionKey(), DEF_MAXCHAN, DEF_MONOCHAN, MonoChannel, sizeof(RF24Channels), RF24Channels);
 	/*
 	Serial.printf("AssignChannels(%d)\n", GetSessionKey());
-	for (int idx=0; idx<sizeof(RF24Channels); idx++) {
+	for (uint8_t idx=0; idx<sizeof(RF24Channels); idx++) {
 		Serial.printf("%02d ",RF24Channels[idx]);
 		if (idx%10 == 9)
 			Serial.print('\n');
@@ -271,8 +277,8 @@ void Transceiver::AssignChannels(void) {
 }
 
 // Use the radio channel corresponding to given datagram number
-byte Transceiver::SetChannel(uint16_t dg_number) {
-	byte retval=RF24Channels[dg_number % sizeof(RF24Channels)];
+uint8_t Transceiver::SetChannel(uint16_t dg_number) {
+	uint8_t retval=RF24Channels[dg_number % sizeof(RF24Channels)];
     Radio_obj.setChannel(retval);
 	//Serial.printf("SetChannel(%d) returns %d\n", dg_number, retval);
 	return retval;

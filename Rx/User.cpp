@@ -20,29 +20,31 @@ PowerSensor PowerSensor_obj(POWERSENSOR_GPIO, 2, 10);
 // 4614 mV sampled as 1728 mV on my system, adjust it for your own hardware
 const float POWERSENSOR_CALIBRATION = 4614.0 / 1728.0;
 
-// Add user code after this line ------------------------------------------
+// User may add code after this line ------------------------------------------
 
 // To use the ESP32Servo library, open the Library Manager in the Arduino IDE and install it from there
 #include <ESP32Servo.h>
-const byte PWM_GPIOS[]={USR_CHAN1_GPIO, USR_CHAN2_GPIO, USR_CHAN3_GPIO};
+
+// Move the servos using these PWM outputs
+const uint8_t PWM_GPIOS[]={USR_CHAN1_GPIO, USR_CHAN2_GPIO, USR_CHAN3_GPIO, USR_CHAN4_GPIO};
 Servo Servo_obj[sizeof(PWM_GPIOS)];
+
+// Turn on/off the Leds using these digital outputs
+const uint8_t BIN_GPIOS[]={USR_CHAN5_GPIO, USR_CHAN6_GPIO};
 
 // User setup example code
 void UserSetup(void) {
      PowerSensor_obj.Config();
 
     // ESP32Servo setup
-    byte idx=0;
-	// for (idx=0; idx<4; idx++)
-	// 	ESP32PWM::allocateTimer(idx);
-	for (idx=0; idx<sizeof(PWM_GPIOS); idx++) {
+	for (uint8_t idx=0; idx<sizeof(PWM_GPIOS); idx++) {
 		Servo_obj[idx].setPeriodHertz(50);
 		Servo_obj[idx].attach(PWM_GPIOS[idx], MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
 	}
 
-    // Channels 4,5 are digital (controled by switches)
-    pinMode(USR_CHAN4_GPIO, OUTPUT);
-    pinMode(USR_CHAN5_GPIO, OUTPUT);
+    // Init the digital outputs (Leds)
+    for (uint8_t idx=0; idx<sizeof(BIN_GPIOS); idx++)
+        pinMode(BIN_GPIOS[idx], OUTPUT);
 }
 
 /* User loop code : incoming Msg_Datagram
@@ -50,32 +52,36 @@ void UserSetup(void) {
    it contains the data received from the transmitter
    typically this data is a list of potentiometers/switches values or sensor readings
    Example message layout:
-   [0]  state of PAIRING_GPIO (Pairing button)
-   [1]  state of USR_CHAN4_GPIO (SW1)
-   [2]  state of USR_CHAN5_GPIO (SW2)
-   [3]  value of USR_CHAN1_GPIO (P1)
-   [4]  value of USR_CHAN2_GPIO (P2)
-   [5]  value of USR_CHAN3_GPIO (P3)
+   [0]  value of USR_CHAN1_GPIO (P1)
+   [1]  value of USR_CHAN2_GPIO (P2)
+   [2]  value of USR_CHAN3_GPIO (P3)
+   [3]  value of USR_CHAN4_GPIO (P4)
+   [4]  state of USR_CHAN5_GPIO (SW1)
+   [5]  state of USR_CHAN6_GPIO (SW2)
 */
 void UserLoopMsg(uint16_t *message) {
+    //static uint16_t Debug_print_counter=0; Debug_print_counter++;
 
-    // Example: control TESTLED with the data received in the MSG datagram
-    digitalWrite(TESTLED, message[0]);
-
-    // Example code continuation : we use 3 servos and 2 digital outputs
-    for (int idx=0; idx<sizeof(PWM_GPIOS); idx++) {
-        int pulse=message[idx+3];
+    // Move the servos
+    for (uint8_t idx=0; idx<sizeof(PWM_GPIOS); idx++) {
+        uint16_t pulse=message[idx];
         Servo_obj[idx].write(pulse);
+        //if (Debug_print_counter%20==0) Serial.printf("Chan%d=%d ", idx+1, pulse);
     }
-    digitalWrite(USR_CHAN4_GPIO, message[1]);
-    digitalWrite(USR_CHAN5_GPIO, message[2]);
+    // Turn on/off the Leds
+    for (uint8_t idx=0; idx<sizeof(BIN_GPIOS); idx++) {
+        uint8_t value=message[idx+sizeof(PWM_GPIOS)];
+        digitalWrite(BIN_GPIOS[idx], value);
+        //if (Debug_print_counter%20==0) Serial.printf("Chan%d=%d ", idx+sizeof(PWM_GPIOS)+1, value);
+    }
+    //if (Debug_print_counter%20==0) Serial.println("");
 }
 
 /* User loop code : outgoing Ack_Datagram
    set your outgoing message here
    it contains the data that is going to be sent back to the transmitter after receiving the next datagram
    typically this data is a list of values related to the receiver state (reception error rate, sensor readings, battery charge)
-   Make sure your data does not exceed the size defined by Transceiver.ACKVALUES
+   Update Transceiver.ACKVALUES to match your data length
    Example message layout:
    [0]  Receiver errors count
    [1]  Receiver power supply voltage
@@ -93,18 +99,5 @@ void UserLoopAck(uint16_t *message) {
     if (PowerSensor_obj.ReadVoltage(POWERSENSOR_CALIBRATION, &avg_millivolts))
         Last_voltage=avg_millivolts;
     message[1]=Last_voltage;
-
-    // message[2] = pressing the pairing button on Rx will light TESTLED on Tx
-    // notice: the pairing button is not used while MULTIFREQ so user can safely access it
-    static byte Last_button_state=HIGH;
-    static unsigned long Last_button_time=0; // to debounce button action
-    if (millis()>=Last_button_time+500) {
-        byte button_state=digitalRead(PAIRING_GPIO);
-        if (button_state!=Last_button_state) {
-            Last_button_state=button_state;
-            Last_button_time=millis();
-        }
-    }
-    message[2]=Last_button_state==LOW?1:0;
 }
 

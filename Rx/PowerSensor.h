@@ -7,6 +7,8 @@
  * Installation, usage : https://github.com/rigou/nRF24L01-FHSS/
 */
 
+// User *may* modify this file if he knows what he is doing
+
 #pragma once
 #include <Arduino.h>
 

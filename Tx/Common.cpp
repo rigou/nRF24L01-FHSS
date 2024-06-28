@@ -7,6 +7,12 @@
  * Installation, usage : https://github.com/rigou/nRF24L01-FHSS/
 */
 
+/******************************************************************************
+* WARNING: This file is part of the nRF24L01-FHSS project base code
+* and user should not modify it. Any user code stored in this file could be
+* made inoperable by subsequent releases of the project.
+******************************************************************************/
+
 #include "Common.h"
 #include "Gpio.h"
 #include <bootloader_random.h> // for GetRandomInt32()
@@ -16,7 +22,7 @@
 // period : time the led is on + time the led is off, in ms
 // time_on : time the led is on, in ms
 // restart : true=start a new period and turn on the led immediately else simply refresh its state
-void BlinkLed(byte led_gpio, unsigned int period, unsigned int time_on, bool restart) {
+void BlinkLed(uint8_t led_gpio, unsigned int period, unsigned int time_on, bool restart) {
 	//Serial.printf("BlinkLed(%d, %d, %d, %d)\n", led_gpio, period, time_on, restart);
 	if (led_gpio) {
 		static unsigned long Begin_time=0;
@@ -46,7 +52,7 @@ void BlinkLed(byte led_gpio, unsigned int period, unsigned int time_on, bool res
 // this function can deal only with a single led
 // time_on : time the led is on, in ms, optional
 // if time_on is given then turn on the led immediately else simply refresh its state
-void FlashLed(byte led_gpio, unsigned int time_on) {
+void FlashLed(uint8_t led_gpio, unsigned int time_on) {
 	if (led_gpio) {
 		static unsigned long End_time=0;
 		static bool led_state=LOW;
@@ -75,11 +81,11 @@ void EndProgram(bool reset) {
 		const int HALTED_DELAY=10000; // ms
 		while (1) {
 			Serial.println("Program halted");
-			if (ERRLED) {
-				for (int idx=0; idx<3; idx++) {
-					digitalWrite(ERRLED, HIGH);
+			if (ERRLED_GPIO) {
+				for (uint8_t idx=0; idx<3; idx++) {
+					digitalWrite(ERRLED_GPIO, HIGH);
 					delay(2000);
-					digitalWrite(ERRLED, LOW);
+					digitalWrite(ERRLED_GPIO, LOW);
 					delay(2000);
 				}
 			}

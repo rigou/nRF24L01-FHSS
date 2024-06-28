@@ -26,7 +26,21 @@
  * type Ctrl-A N    to prefix each line with a timestamp
  * type Ctrl-A Z    to display minicom menu
  * type Ctrl-A X    to quit
+ *
+ * This program is published under the GNU General Public License. 
+ * This program is free software and you can redistribute it and/or modify it under the terms
+ * of the GNU General  Public License as published by the Free Software Foundation, version 3.
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY.
+ * See the GNU General Public License for more details : https://www.gnu.org/licenses/ *GPL 
+ *
+ * Installation, usage : https://github.com/rigou/nRF24L01-FHSS/
 */
+
+/******************************************************************************
+* WARNING: This file is part of the nRF24L01-FHSS project base code
+* and user should not modify it. Any user code stored in this file could be
+* made inoperable by subsequent releases of the project.
+******************************************************************************/
 
 #include "Common.h"
 #include "Gpio.h"
@@ -39,7 +53,7 @@ Settings Settings_obj;
 Transceiver Transceiver_obj;
 
 #define APP_NAME "Tx"
-#define APP_VERSION "1.6.0"
+#define APP_VERSION "1.6.2"
 
 // Debug stuff
 //
@@ -56,7 +70,7 @@ Transceiver Transceiver_obj;
 enum TxStates {MONOFREQ, MULTIFREQ};
 TxStates Tx_state=MONOFREQ;
 
-bool RunLedEnabled=(RUNLED!=0); // true by default, false when the Pairing button is pressed
+bool RunLedEnabled=(RUNLED_GPIO!=0); // true by default, false when the Pairing button is pressed
 
 uint16_t Msg_message[Transceiver::MSGVALUES];
 uint16_t Msg_type=Transceiver::DGT_SERVICE;
@@ -66,8 +80,7 @@ uint16_t ErrorCounter=0;  // number of transmission errors per second, updated o
 // DGPERIOD is the delay between 2 datagrams, in microseconds
 // Acceptable CPU speed for DGPERIOD=10000 : 80-240 MHz on Tx and/or Rx
 // Larger delays increase the time available for your application data processing between datagrams
-const micros_t DGPERIOD=10000; // microseconds, must be multiple of 100 ; 10000 => 100 dg/s, 50000 => 20 gd/s
-
+const micros_t DGPERIOD=1000000/COM_TRANS_DGS; // microseconds, must be multiple of 100
 bool PairingInProgress=false;
 
 // Autorepeat timer used to transmit datagrams periodically
@@ -79,30 +92,27 @@ void ARDUINO_ISR_ATTR onTimer(){
     xSemaphoreGiveFromISR(Semaphore_obj, NULL);
 }
 
+// #define SCOPE_GPIO 17 // the oscilloscope probe
+
 void setup() {
     Serial.begin(115200);
     while (!Serial) ; // wait for serial port to connect   
-	//Serial.print('\n'); for (int idx = 0; idx<4; idx++) { Serial.print((char)('A'+idx)); delay(500); } // debug
+	//Serial.print('\n'); for (uint8_t idx = 0; idx<4; idx++) { Serial.print((char)('A'+idx)); delay(500); } // debug
     Serial.printf("\n\n%s %s\n", APP_NAME, APP_VERSION);
 
     // pinMode(SCOPE_GPIO, OUTPUT);
     pinMode(PAIRING_GPIO, INPUT_PULLUP);
-    if (RUNLED)
-        pinMode(RUNLED, OUTPUT);
-    if (ERRLED)
-        pinMode(ERRLED, OUTPUT);
-    if (TESTLED)
-        pinMode(TESTLED, OUTPUT);
+    if (RUNLED_GPIO)
+        pinMode(RUNLED_GPIO, OUTPUT);
+    if (ERRLED_GPIO)
+        pinMode(ERRLED_GPIO, OUTPUT);
 	pinMode(PALEVEL0_GPIO, INPUT_PULLUP);
 	pinMode(PALEVEL1_GPIO, INPUT_PULLUP);
-
-    // this delay allows Rx to initialize itself and reach the SYNCHRONIZING state before Tx resumes transmission
-    digitalWrite(RUNLED, HIGH);
-    delay(2000); 
+    digitalWrite(RUNLED_GPIO, HIGH);
                 
     // Open the settings file, create it if it does not exist
     // default values are provided only for creating the settings file
-    if (Settings_obj.Init(PAIRING_GPIO, RUNLED, Transceiver::DEF_TXID, Transceiver::DEF_MONOCHAN, Transceiver::DEF_PALEVEL)!=0)
+    if (Settings_obj.Init(PAIRING_GPIO, RUNLED_GPIO, Transceiver::DEF_TXID, Transceiver::DEF_MONOCHAN, Transceiver::DEF_PALEVEL)!=0)
         EndProgram(false); // halt command
 
     // read the transceiver settings
@@ -197,19 +207,19 @@ void loop() {
 
     if (Tx_state==MULTIFREQ) {
         if (RunLedEnabled)
-            BlinkLed(RUNLED, 1000, 20, false);
+            BlinkLed(RUNLED_GPIO, 1000, 20, false);
 
         if (!result)
-            FlashLed(ERRLED, 20); // turn on ERRLED
+            FlashLed(ERRLED_GPIO, 20); // turn on ERRLED_GPIO
         else
-            FlashLed(ERRLED); // refresh ERRLED 
+            FlashLed(ERRLED_GPIO); // refresh ERRLED_GPIO 
     }
     else {
         if (RunLedEnabled) {
             if (PairingInProgress)
-                BlinkLed(RUNLED, 3000, 1000, false);
+                BlinkLed(RUNLED_GPIO, 3000, 1000, false);
             else
-                BlinkLed(RUNLED, 100, 50, false);
+                BlinkLed(RUNLED_GPIO, 100, 50, false);
         }
     }
 }
@@ -315,14 +325,14 @@ bool send(void) {
 
     // check actions on the Pairing button
     if (Tx_state==MONOFREQ) { // else already paired
-        BtnStates btn_state=ReadBtn(PAIRING_GPIO, RUNLED, 1500);
+        BtnStates btn_state=ReadBtn(PAIRING_GPIO, RUNLED_GPIO, 1500);
         RunLedEnabled=(btn_state==BTN_RELEASED); // if btn_state==BTN_PRESSED then read_button() will control the Led
         if (btn_state==BTN_REACHED_DURATION) {
             // blink led for 3 seconds to tell user that he can release the button
             unsigned long stop_time=millis()+3000;
             while (millis()<stop_time)
-                BlinkLed(RUNLED, 100, 50, false);
-            digitalWrite(RUNLED, LOW);
+                BlinkLed(RUNLED_GPIO, 100, 50, false);
+            digitalWrite(RUNLED_GPIO, LOW);
 
             // reconfigure the transceiver for pairing
             Serial.println("Pairing");
@@ -344,10 +354,10 @@ bool send(void) {
 
 // RF output level is hardware-encoded with 2 GPIOs
 // 2 bits give 4 possible values: 11=RF24_PA_MIN (0), 10=RF24_PA_LOW (1), 01=RF24_PA_HIGH (2), 00=RF24_PA_MAX (3)
-int read_pa_level_switch(byte bit0_gpio, byte bit1_gpio) {
-	byte bit0=digitalRead(bit0_gpio)==HIGH?1:0;
-	byte bit1=digitalRead(bit1_gpio)==HIGH?1:0;
-	byte idx=(2*bit1)+bit0;
+int read_pa_level_switch(uint8_t bit0_gpio, uint8_t bit1_gpio) {
+	uint8_t bit0=digitalRead(bit0_gpio)==HIGH?1:0;
+	uint8_t bit1=digitalRead(bit1_gpio)==HIGH?1:0;
+	uint8_t idx=(2*bit1)+bit0;
 	int pa_values[]={RF24_PA_MAX, RF24_PA_HIGH, RF24_PA_LOW, RF24_PA_MIN};
 	return pa_values[idx];
 }

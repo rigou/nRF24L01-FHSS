@@ -7,6 +7,8 @@
  * Installation, usage : https://github.com/rigou/nRF24L01-FHSS/
 */
 
+// User *may* modify this file if he knows what he is doing
+
 #include "PowerSensor.h"
 
 static volatile bool ADC_conversion_complete; // Flag which will be set by the ISR on_AdcComplete() when conversion is done

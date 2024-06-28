@@ -7,6 +7,12 @@
  * Installation, usage : https://github.com/rigou/nRF24L01-FHSS/
 */
 
+/******************************************************************************
+* WARNING: This file is part of the nRF24L01-FHSS project base code
+* and user should not modify it. Any user code stored in this file could be
+* made inoperable by subsequent releases of the project.
+******************************************************************************/
+
 #include "Settings.h"
 #include "Common.h"
 #include <rgButton.h>
@@ -22,11 +28,11 @@
 //	2	settings file read failed
 //	3	SPIFFS filesystem mount failed
 int Settings::Init(
-	byte button_gpio,
-	byte led_gpio, 
+	uint8_t button_gpio,
+	uint8_t led_gpio, 
 	uint16_t default_tx_deviceid, 
-	byte default_mono_chan, 
-	byte default_pa_level
+	uint8_t default_mono_chan, 
+	uint8_t default_pa_level
 ) {
 	const int BUTTON_HOLD=3000; // ms, hold the button long enough to create a new file with default values
 	int retval=0;
