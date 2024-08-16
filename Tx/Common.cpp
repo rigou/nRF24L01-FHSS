@@ -23,7 +23,7 @@
 // time_on : time the led is on, in ms
 // restart : true=start a new period and turn on the led immediately else simply refresh its state
 void BlinkLed(uint8_t led_gpio, unsigned int period, unsigned int time_on, bool restart) {
-	//Serial.printf("BlinkLed(%d, %d, %d, %d)\n", led_gpio, period, time_on, restart);
+	//dbprintf("BlinkLed(%d, %d, %d, %d)\n", led_gpio, period, time_on, restart);
 	if (led_gpio) {
 		static unsigned long Begin_time=0;
 		static bool led_state=LOW;
@@ -38,12 +38,12 @@ void BlinkLed(uint8_t led_gpio, unsigned int period, unsigned int time_on, bool 
 			Begin_time=time_now; // start a new period
 			digitalWrite(led_gpio, HIGH);
 			led_state=HIGH;
-			//Serial.printf("BlinkLed %d: now %lu, begin %lu, period %d : HIGH\n", led_gpio, time_now, Begin_time, period);
+			//dbprintf("BlinkLed %d: now %lu, begin %lu, period %d : HIGH\n", led_gpio, time_now, Begin_time, period);
 		}
 		if (time_now > Begin_time+time_on && led_state==HIGH) {
 			digitalWrite(led_gpio, LOW);
 			led_state=LOW;
-			//Serial.printf("BlinkLed %d: now %lu, begin %lu, time_on %d : LOW\n", led_gpio, time_now, Begin_time, time_on);
+			//dbprintf("BlinkLed %d: now %lu, begin %lu, time_on %d : LOW\n", led_gpio, time_now, Begin_time, time_on);
 		}
 	}
 }
@@ -73,14 +73,14 @@ void FlashLed(uint8_t led_gpio, unsigned int time_on) {
 // reset MCU or hold program in infinite loop after fatal error
 void EndProgram(bool reset) {
 	if (reset) {
-        Serial.println("Reset");
+        dbprintln("Reset");
 		ESP.restart();
 		// this point is never reached
 	}
 	else {
 		const int HALTED_DELAY=10000; // ms
 		while (1) {
-			Serial.println("Program halted");
+			dbprintln("Program halted");
 			if (ERRLED_GPIO) {
 				for (uint8_t idx=0; idx<3; idx++) {
 					digitalWrite(ERRLED_GPIO, HIGH);

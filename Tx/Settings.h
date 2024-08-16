@@ -14,28 +14,39 @@
 ******************************************************************************/
 
 #pragma once
-#include <rgParam.h>
+#include <rgCsv.h>
 
-class Settings : public rgParam {
+class Settings : public rgCsv {
 	private:
-		// Application settings
-		const char *PARFILE="/RF24.PAR";
+		/* file param.csv
+		# Application parameters
+		# Line length 25 chr max
+		# Do not change the order
+		# of the lines
+		TXID,64540
+		MONOCHAN,78
+		PALEVEL,0
+		*/
+		const char *PARFILE="param.csv";
 				
 	public:
-		// inherited methods
-		//~ int Init(void);
-		//~ int Load(void);
-		//~ int Save(void);
-		//~ void Clear(void); // reset all settings to their default values in memory only
-		//~ int Dump(int buffer_size_int, char *buffer_out_str); // copy the raw contents of the file into buffer
-		//~ void SerialDump(void);
+		/* inherited methods
+		int Open(const char *path_str, int maxlines_int, int maxcells_int, int maxcellen_int);
+		void Close(void);
+		int Load(void);
+		int Save(void);
+		int GetIntCell(byte line_int, byte column_int);
+		int SetIntCell(byte line_int, byte column_int, int new_value_int);
+		const char *GetStrCell(byte line_int, byte column_int);
+		int SetStrCell(byte line_int, byte column_int, const char *new_value_str);
+		*/
 
 		static const uint8_t NO_BUTTON=255;
 		
 	    int Init(uint8_t button_gpio, uint8_t led_gpio, 
-		uint16_t default_tx_deviceid, 
-		uint8_t default_mono_chan, 
-		uint8_t default_pa_level); // overloaded
+			uint16_t default_tx_deviceid, 
+			uint8_t default_mono_chan, 
+			uint8_t default_pa_level);
 
 		int GetDeviceId(void);
 		bool SetDeviceId(int value);

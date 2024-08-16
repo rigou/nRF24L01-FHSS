@@ -12,5 +12,5 @@
 
 enum BtnStates {BTN_PRESSED, BTN_RELEASED, BTN_REACHED_DURATION};
 
-BtnStates ReadBtn(byte btn_gpio, byte led_gpio, long max_duration);
-BtnStates ReadBtnBlock(byte btn_gpio, byte led_gpio, long max_duration);
+BtnStates ReadBtn(uint8_t btn_gpio, uint8_t led_gpio, long max_duration);
+BtnStates ReadBtnBlock(uint8_t btn_gpio, uint8_t led_gpio, long max_duration);

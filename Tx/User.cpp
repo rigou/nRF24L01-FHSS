@@ -32,7 +32,7 @@ void UserSetup(void) {
     // set the ADC resolution to 10 bits (0-1023) for probing channels 1,2,3 (potentiometers)
 	analogReadResolution(10);
 
-    // Init the digital inputs (switches)
+    // initialize the digital inputs (switches)
     for (uint8_t idx=0; idx<sizeof(BIN_GPIOS); idx++)
         pinMode(BIN_GPIOS[idx], INPUT_PULLUP);
 }
@@ -58,15 +58,15 @@ void UserLoopMsg(uint16_t *message) {
         uint16_t value=analogRead(DAC_GPIOS[idx]);
         uint16_t pulse=map(value, 0, 1023, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
         message[idx]=pulse;
-        //if (Debug_print_counter%20==0) Serial.printf("Chan%d=%d ", idx+1, pulse);
+        //if (Debug_print_counter%20==0) dbprintf("Chan%d=%d ", idx+1, pulse);
     }
     // Read the switches
     for (uint8_t idx=0; idx<sizeof(BIN_GPIOS); idx++) {
         uint8_t value=digitalRead(BIN_GPIOS[idx]);
         message[idx+sizeof(DAC_GPIOS)]=value;
-        //if (Debug_print_counter%20==0) Serial.printf("Chan%d=%d ", idx+sizeof(DAC_GPIOS)+1, value);
+        //if (Debug_print_counter%20==0) dbprintf("Chan%d=%d ", idx+sizeof(DAC_GPIOS)+1, value);
     }
-    //if (Debug_print_counter%20==0) Serial.println("");
+    //if (Debug_print_counter%20==0) dbprintln("");
 }
 
 /* User loop code : incoming Ack_Datagram
@@ -78,13 +78,12 @@ void UserLoopMsg(uint16_t *message) {
    [1]  Receiver power supply voltage
 */
 void UserLoopAck(uint16_t *message) {
-
     // Example: display the Tx error count and the data received from Rx: Rx error count and power supply voltage
     static unsigned long Last_time=0; // ms
-    if (millis()>=Last_time+5000) {
+    if (millis()>=Last_time+1000) {
         uint16_t rx_errors=message[0];  // Rx error count
         uint16_t rx_voltage=message[1]; // Rx power supply voltage
-        Serial.printf("Tx %u errors, Rx %u errors, %u mV\n", ErrorCounter, rx_errors, rx_voltage);
+        dbprintf("Tx %u errors, Rx %u errors, %u mV\n", ErrorCounter, rx_errors, rx_voltage);
         Last_time=millis();
     }
 }

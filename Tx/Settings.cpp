@@ -17,6 +17,19 @@
 #include "Common.h"
 #include <rgButton.h>
 
+/*****************************************
+* Application parameters file param.csv
+*****************************************/
+enum class Paramid {
+	TXID,
+	MONOCHAN,
+	PALEVEL
+};
+rgCsv ParamCsv_obj;
+// we use these macros to simplify access to the mCells array of ParamCsv_obj
+#define PARAMGETINT(x)		GetIntCell(byte(Paramid::x),1)
+#define PARAMSETINT(x,v)	SetIntCell((byte)Paramid::x, 1, (v))
+
 // Mount the filesystem and read current settings from PARFILE
 // PARFILE will be created if not found
 // PARFILE will be overwritten with default values if the given button is pressed long enough
@@ -38,20 +51,16 @@ int Settings::Init(
 	int retval=0;
 
 	// Mount the file system and allocate memory for the file
-	// format_fs_if_failed = 1
-	// max_len_path = 16
-	// max_len_key  = 8
-	// max_len_value = 8 // enough for storing the hexadecimal representation of a 32 bit unsigned integer
-	// max_records = 3   // "TXID", "MONOCHAN", "PALEVEL" (PALEVEL is used only by Rx)
-	int init_result=rgParam::Init(PARFILE, 1, 16, 8, 8, 3);
-	if (init_result==0) {
+	// 3 lines, 2 columns, 12 chr / cell
+	int open_result=Open(PARFILE, 3, 2, 12);
+	if (open_result==0) {
 
 		// Hold the Pairing button during boot to delete the current settings file
 		if (button_gpio!=NO_BUTTON) {
 			BtnStates btn_state=ReadBtnBlock(button_gpio, led_gpio, BUTTON_HOLD); // ms
 			if (btn_state==BTN_REACHED_DURATION) {
-				if (Remove())
-					Serial.println("Init: error deleting settings file"); // continue anyway
+				if (!LittleFS.remove(PARFILE))
+					dbprintln("Init: error deleting settings file"); // continue anyway
 			}
 		}
 		/*  Load the whole file in RAM
@@ -63,10 +72,10 @@ int Settings::Init(
 			-5	too many lines
 			-6	line too long or missing newline
 		*/
-		int nrecords=Load(); // returns the number of key/value pairs found, or a negative value on error 
+		int nrecords=Load(); // returns the number of csv data lines found, or a negative value on error 
 		if (nrecords == -1) {
 			// file not found : create the file with default values
-			Serial.println("Init: creating settings file");
+			dbprintln("Init: creating settings file");
 
 			// This string uniquely identifies the device
 			SetDeviceId(default_tx_deviceid);
@@ -81,93 +90,66 @@ int Settings::Init(
 			// Tx uses the value returned by read_pa_level_switch() and does not access this key
 			SetPaLevel(default_pa_level);
 
-			nrecords=Save(); // returns the number of key/value pairs written, or a negative value on error 
+			nrecords=Save(); // returns the number of lines written, negative value on error, or a negative value on error 
 			if (nrecords>=0) {
-				Serial.println("Init: settings file created");
+				dbprintln("Init: settings file created");
 				retval=0;
 			}
 			else {
-				Serial.printf("Init: error %d creating settings file\n", nrecords);
+				dbprintf("Init: error %d creating settings file\n", nrecords);
 				retval=1;
 			}
 		}
-		if (nrecords>=0) { 
-			Serial.printf("Init: settings file contains %d records\n", nrecords);
+		if (nrecords>0) { 
+			dbprintf("Init: settings file contains %d records\n", nrecords);
 			retval=0;
 		}
 		else {
-			Serial.printf("Init: error %d accessing settings file\n", nrecords);
+			dbprintf("Init: error %d accessing settings file\n", nrecords);
 			retval=2;
 		}
-		SerialDump(PARFILE); // $$DEBUG
-
 	}
 	else {
-		Serial.println("Init: failed mounting SPIFFS filesystem");
+		dbprintf("Init: file %s or filesystem not found\n", PARFILE);
 		retval=3;
 	}
-
     return retval;
 }
 
 int Settings::GetDeviceId(void) {
-	int retval=0;
-	unsigned int value=0;
-	if (GetKeyInt("TXID", &value)>=0)
-		retval=value;
-	else {
-		Serial.println("TXID not found");
-		retval=-1;
-	}
-	return retval;
+	return PARAMGETINT(TXID);
 }
 
 bool Settings::SetDeviceId(int value) {
 	bool retval=true;
-	if (SetKeyInt("TXID", value)<0)  {
-		Serial.println("TXID write error");
+	if (PARAMSETINT(TXID, value)<0)  {
+		dbprintln("TXID write error");
 		retval=false;
 	}
 	return retval;
 }
 
 int Settings::GetMonoChannel() {
-	int retval=0;
-	unsigned int value=0;
-	if (GetKeyInt("MONOCHAN", &value)>=0)
-		retval=value;
-	else {
-		Serial.println("MONOCHAN not found");
-		retval=-1;
-	}
-	return retval;
+	return PARAMGETINT(MONOCHAN);
 }
 
 bool Settings::SetMonoChannel(int value) {
 	bool retval=true;
-	if (SetKeyInt("MONOCHAN", value)<0)  {
-		Serial.println("MONOCHAN write error");
+	if (PARAMSETINT(MONOCHAN, value)<0)  {
+		dbprintln("MONOCHAN write error");
 		retval=false;
 	}
 	return retval;
 }
 
 int Settings::GetPaLevel() {
-	int retval=0;
-	unsigned int value=0;
-	if (GetKeyInt("PALEVEL", &value)>=0)
-		retval=value;
-	else {
-		Serial.println("PALEVEL not found");
-		retval=-1;
-	}
-	return retval;
+	return PARAMGETINT(PALEVEL);
 }
 
 bool Settings::SetPaLevel(int value) {
 	bool retval=true;
-	if (SetKeyInt("PALEVEL", value)<0)  {
-		Serial.println("PALEVEL write error");
+	if (PARAMSETINT(PALEVEL, value)<0)  {
+		dbprintln("PALEVEL write error");
 		retval=false;
 	}
 	return retval;

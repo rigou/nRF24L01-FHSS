@@ -17,9 +17,9 @@
  * 8. Rx & Tx reboot after 1 s  - both leds flash rapidly for 1 s then flash briefly once per second
  * 9. Rx & Tx are paired and transmitting data.
  * 
- * Run minicom to display the debug log issued by Serial.print() :
-    LOG="$HOME/Downloads/$(date '+%Y-%m-%dT%H:%M:%S')_rf24Tx.log" ; rm -f "$LOG" ; minicom -C "$LOG" -D /dev/ttyUSB0
-    LOG="$HOME/Downloads/$(date '+%Y-%m-%dT%H:%M:%S')_rf24Rx.log" ; rm -f "$LOG" ; minicom -C "$LOG" -D /dev/ttyUSB1
+ * Run minicom to display the debug log issued by dbprint() :
+    LOG="$HOME/Downloads/$(date '+%Y-%m-%dT%H:%M:%S')_rf24Tx.log" ; minicom -C "$LOG" -D /dev/ttyUSB0
+    LOG="$HOME/Downloads/$(date '+%Y-%m-%dT%H:%M:%S')_rf24Rx.log" ; minicom -C "$LOG" -D /dev/ttyUSB1
  * type Ctrl-A U    to terminate text lines with CR+LF for proper display 
  *      you can also set in the default settings: "Configure Minicom" / "Screen and keyboard" / "Add carriage return" 
  *      then "Save setup as dfl"
@@ -53,7 +53,7 @@ Settings Settings_obj;
 Transceiver Transceiver_obj;
 
 #define APP_NAME "Tx"
-#define APP_VERSION "1.6.2"
+#define APP_VERSION "1.6.5"
 
 // Debug stuff
 //
@@ -97,8 +97,8 @@ void ARDUINO_ISR_ATTR onTimer(){
 void setup() {
     Serial.begin(115200);
     while (!Serial) ; // wait for serial port to connect   
-	//Serial.print('\n'); for (uint8_t idx = 0; idx<4; idx++) { Serial.print((char)('A'+idx)); delay(500); } // debug
-    Serial.printf("\n\n%s %s\n", APP_NAME, APP_VERSION);
+	//dbprint('\n'); for (uint8_t idx = 0; idx<4; idx++) { dbprint((char)('A'+idx)); delay(500); } // debug
+    dbprintf("\n\n%s %s\n", APP_NAME, APP_VERSION);
 
     // pinMode(SCOPE_GPIO, OUTPUT);
     pinMode(PAIRING_GPIO, INPUT_PULLUP);
@@ -116,7 +116,7 @@ void setup() {
         EndProgram(false); // halt command
 
     // read the transceiver settings
-    int device_id=Settings_obj.GetDeviceId();
+    int device_id=(uint16_t)Settings_obj.GetDeviceId();
     int mono_channel=Settings_obj.GetMonoChannel();
     if (device_id < 0 || mono_channel<0)
         EndProgram(false); // halt command
@@ -131,7 +131,6 @@ void setup() {
         Settings_obj.SetDeviceId(device_id);
         Settings_obj.SetMonoChannel(mono_channel);
         Settings_obj.Save();
-        Settings_obj.SerialDump(); // $$DEBUG
     }
     
     // Configure the transceiver
@@ -143,7 +142,7 @@ void setup() {
     // this semaphore tells when the timer has fired
     // we use it to make the onTimer() ISR return as fast as possible
     Semaphore_obj = xSemaphoreCreateBinary();
-    // Set timer frequency to 10 kHz to get a 100 microsecond resolution
+    // Set timer frequency to 10 kHz to get a 100 microsecond resolution (slower frequency won't work)
     Timer_obj = timerBegin(10000);
     // Attach onTimer function to our timer.
     timerAttachInterrupt(Timer_obj, &onTimer);
@@ -155,7 +154,7 @@ void setup() {
     // Run user setup code
     UserSetup();
 
-    Serial.printf("Starting after %lu ms\n", millis());
+    dbprintf("Starting after %lu ms\n", millis());
 }
 
 void loop() {
@@ -183,16 +182,16 @@ void loop() {
         result=send();
         // digitalWrite(SCOPE_GPIO, LOW);
 #ifdef DEBUG_PRINT_MSG_DATAGRAMS
-        Serial.print("Msg: ");
+        dbprint("Msg: ");
         Transceiver_obj.PrintMsgDatagram(Transceiver_obj.Msg_Datagram);
-        Serial.print('\n');
+        dbprint('\n');
 #endif
         if (result) {
             if (Transceiver_obj.Ack_Datagram.type & Transceiver::DGT_USER) {
 #ifdef DEBUG_PRINT_ACK_DATAGRAMS
-                Serial.print("Ack: ");
+                dbprint("Ack: ");
                 Transceiver_obj.PrintAckDatagram(Transceiver_obj.Ack_Datagram);
-                Serial.print('\n');
+                dbprint('\n');
 #endif
                 UserLoopAck(Transceiver_obj.Ack_Datagram.message);
             }
@@ -200,9 +199,9 @@ void loop() {
 
 #ifdef DEBUG_PRINT_MSG_DATAGRAMS
         else
-            Serial.println("Transmission error");
+            dbprintln("Transmission error");
 #endif
-        //Serial.printf("Send time=%lu\n", micros() - start_timer);
+        //dbprintf("Send time=%lu\n", micros() - start_timer);
     }
 
     if (Tx_state==MULTIFREQ) {
@@ -248,14 +247,14 @@ bool send(void) {
     if (retval && Transceiver_obj.Ack_Datagram.type & Transceiver::DGT_SERVICE) {
         if (PairingInProgress) {
             if (Transceiver_obj.Ack_Datagram.type & Transceiver::DGT_PAIRING_COMPLETE) {
-                Serial.println("Pairing complete, rebooting");
+                dbprintln("Pairing complete, rebooting");
                 EndProgram(true); // reset command
             }
         }
         else if ((Transceiver_obj.Ack_Datagram.type & Transceiver::DGT_SYNCHRONIZED) && Multifreq_number==0) {
             // we received the first datagram telling us Rx is synchronized
             Multifreq_number=Transceiver_obj.Ack_Datagram.message[0];
-            Serial.printf("synchronized after %lu ms\n", millis());
+            dbprintf("synchronized after %lu ms\n", millis());
         }
     }
 
@@ -263,13 +262,13 @@ bool send(void) {
         if (!PairingInProgress && Multifreq_number && Transceiver_obj.Msg_Datagram.number==Multifreq_number) {
             // we have sent the last datagram of the synchronized sequence : switch to MULTIFREQ
             Tx_state=MULTIFREQ;
-            Serial.printf("MULTIFREQ after %lu ms, period=%lu µs (%u dg/s)\n", millis(), DGPERIOD, (unsigned int)(1000000/DGPERIOD));
+            dbprintf("MULTIFREQ after %lu ms, period=%lu µs (%u dg/s)\n", millis(), DGPERIOD, (unsigned int)(1000000/DGPERIOD));
             // assign values to the array of radio channels
             Transceiver_obj.SetSessionKey(Session_key);
             Transceiver_obj.AssignChannels();
 #ifdef DEBUG_RANDOM_DISCONNECT
             uint16_t debug_disconnection_seed=GetRandomInt16();
-            Serial.printf("debug: random disconnection seed=%u\n", debug_disconnection_seed);
+            dbprintf("debug: random disconnection seed=%u\n", debug_disconnection_seed);
             randomSeed(debug_disconnection_seed);
 #endif
         }
@@ -277,8 +276,8 @@ bool send(void) {
             // Send configuration settings to the receiver
             // Tx stays in MONOFREQ until the synchronized sequence is complete or while pairing in progress, sending these DGT_SERVICE datagrams
             // Tx sends these DGT_SERVICE datagrams while Tx_state=MONOFREQ
-            static uint16_t device_id=Settings_obj.GetDeviceId();
-            static uint16_t mono_channel=Settings_obj.GetMonoChannel();
+            static uint16_t device_id=(uint16_t)Settings_obj.GetDeviceId();
+            static uint16_t mono_channel=(uint16_t)Settings_obj.GetMonoChannel();
             memset(Msg_message, 0, sizeof(Msg_message));
             Msg_message[0]=device_id;
             Msg_message[1]=mono_channel;
@@ -288,7 +287,7 @@ bool send(void) {
 
             static micros_t Debug_config_settings_printed_time=0;
             if (millis()>=Debug_config_settings_printed_time+1000) {
-                Serial.printf("Sending device_id=x%04x mono_channel=x%04x pa_level=%04x session_key=x%04x\n", 
+                dbprintf("Sending device_id=x%04x mono_channel=x%04x pa_level=%04x session_key=x%04x\n", 
                     Msg_message[0],
                     Msg_message[1],
                     Msg_message[2],
@@ -301,18 +300,17 @@ bool send(void) {
         if (!retval)
             Error_counter++;
 
-        // number of consecutive missing ACK datagrams while MULTIFREQ: we reset the MCU if this counter reaches 100
+        // number of consecutive missing ACK datagrams while MULTIFREQ: we reset the MCU if this counter reaches COM_TRANS_ERRORS
         static uint16_t Reset_counter=0;
         if (retval)
             Reset_counter=0;
         else {
-            // reset if we counted 100 consecutive missing ACK datagrams (Rx was turned off ?)
+            // reset if we counted COM_TRANS_ERRORS consecutive missing ACK datagrams
             Reset_counter++;
-            if (Reset_counter==100) {
-                // Reboot after 100 consecutive missing ACK datagrams
+            if (COM_TRANS_ERRORS && Reset_counter==COM_TRANS_ERRORS) {
                 // Rx setup() execution time : 205 ms
                 // Tx setup() execution time : 165 ms
-                Serial.println("Reboot after losing connection");
+                dbprintf("Reboot after %d consecutive missed ACK datagrams\n", COM_TRANS_ERRORS);
                 EndProgram(true); // reset command
             }
         }
@@ -335,7 +333,7 @@ bool send(void) {
             digitalWrite(RUNLED_GPIO, LOW);
 
             // reconfigure the transceiver for pairing
-            Serial.println("Pairing");
+            dbprintln("Pairing");
             PairingInProgress=true;
             Transceiver_obj.HotConfig(true, Transceiver::DEF_TXID, Transceiver::DEF_MONOCHAN, Transceiver::DEF_PALEVEL);
         }
@@ -344,8 +342,8 @@ bool send(void) {
     // reset randomly to simulate connection loss
     if (random(240000)<10) {
         // probability 1/240000 ~ 1 per 20 minutes on average at 100 dg/s = 1 / (240000 / 100 / (60 * 2))
-        Serial.printf("debug: random reboot after %lu minutes\n", millis()/60000);
-        Serial.println("----------------------------------------");
+        dbprintf("debug: random reboot after %lu minutes\n", millis()/60000);
+        dbprintln("----------------------------------------");
         EndProgram(true); // reset command
     }
 #endif

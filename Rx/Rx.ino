@@ -24,7 +24,7 @@ Settings Settings_obj;
 Transceiver Transceiver_obj;
 
 #define APP_NAME "Rx"
-#define APP_VERSION "1.6.2"
+#define APP_VERSION "1.6.5"
 
 // Debug stuff
 //
@@ -63,8 +63,8 @@ const uint8_t SYNACKNUMBER=64;
 void setup() {
     Serial.begin(115200);
     while (!Serial) ; // wait for serial port to connect
-	//Serial.print('\n'); for (uint8_t idx = 0; idx<4; idx++) { Serial.print((char)('A'+idx)); delay(500); } // debug
-    Serial.printf("\n\n%s %s\n", APP_NAME, APP_VERSION);
+	//dbprint('\n'); for (uint8_t idx = 0; idx<4; idx++) { dbprint((char)('A'+idx)); delay(500); } // debug
+    dbprintf("\n\n%s %s\n", APP_NAME, APP_VERSION);
 
     // pinMode(SCOPE_GPIO, OUTPUT);
     pinMode(PAIRING_GPIO, INPUT_PULLUP);
@@ -79,9 +79,9 @@ void setup() {
         EndProgram(false); // halt command
 
     // read the transceiver settings
-    int device_id=Settings_obj.GetDeviceId();
-    int mono_channel=Settings_obj.GetMonoChannel();
-    int pa_level=Settings_obj.GetPaLevel();
+    int device_id=(uint16_t)Settings_obj.GetDeviceId();
+    int mono_channel=(uint16_t)Settings_obj.GetMonoChannel();
+    int pa_level=(uint16_t)Settings_obj.GetPaLevel();
     if (device_id < 0 || mono_channel<0 || pa_level<0)
         EndProgram(false); // halt command
 
@@ -91,7 +91,7 @@ void setup() {
     // Run user setup code
     UserSetup();
 
-    Serial.printf("Starting after %lu ms\n", millis());
+    dbprintf("Starting after %lu ms\n", millis());
 }
 
 void loop() {
@@ -107,7 +107,7 @@ void loop() {
         Ack_type=Transceiver::DGT_USER;
         memset(Ack_message, 0, sizeof(Ack_message));
         UserLoopAck(Ack_message);
-        //Serial.printf("Receive time=%lu\n", micros() - start_timer);
+        //dbprintf("Receive time=%lu\n", micros() - start_timer);
     }
     
     if (Rx_state==MULTIFREQ) {
@@ -129,7 +129,7 @@ void loop() {
             digitalWrite(ERRLED_GPIO, HIGH);
     }
     if (RebootTime && millis()>=RebootTime) {
-        Serial.println("Delayed reboot after pairing");
+        dbprintln("Delayed reboot after pairing");
         EndProgram(true); // reset command
     }
 
@@ -149,7 +149,6 @@ uint8_t receive(void) {
     static micros_t Next_Eta_us=0;
     static uint16_t Prev_number=0;
     static uint16_t Multifreq_number=0; // we'll start frequency hopping *after* receiving this datagram
-    static uint16_t Reset_counter=0;  // number of consecutive missing datagrams while MULTIFREQ: we reset the MCU if this counter reaches 100
     static unsigned long Stat_time_ms=0; // to compute error statistics every second
     static unsigned long Last_signal_time_ms=millis(); // to print "no signal" warning every second
     static uint16_t Error_counter=0;  // number of missing datagrams per second, updated once/second
@@ -157,12 +156,12 @@ uint8_t receive(void) {
     unsigned long time_now_ms=millis();
     if (Rx_state==SYNCHRONIZING) {
         if (time_now_ms >= Last_signal_time_ms+1000) {
-            Serial.println("no signal");
+            dbprintln("no signal");
             Last_signal_time_ms=time_now_ms;
         }
     }
     else {
-        // clear error statistics every second
+        // publish error statistics every second
         if (Stat_time_ms && time_now_ms >= Stat_time_ms+1000) {
             if (Rx_state==MULTIFREQ && Transceiver_obj.Avg_Datagram_Period) {
                 ErrorCounter=Error_counter; // update the global ErrorCounter once/second
@@ -179,7 +178,7 @@ uint8_t receive(void) {
             Ack_type=Transceiver::DGT_SERVICE; // ack datagrams sent while SYNCHRONIZING are empty
             if (Transceiver_obj.Avg_Datagram_Period) {
                 Rx_state=MONOFREQ;
-                Serial.printf("synchronized after %lu ms, period=%lu µs\n", millis(), Transceiver_obj.Avg_Datagram_Period);
+                dbprintf("synchronized after %lu ms, period=%lu µs\n", millis(), Transceiver_obj.Avg_Datagram_Period);
                 // send SYNACKNUMBER ack datagrams informing Tx that we are synchronized and will switch to MULTIFREQ at this datagram number
                 Multifreq_number=Transceiver_obj.Msg_Datagram.number+SYNACKNUMBER;
             }
@@ -191,14 +190,14 @@ uint8_t receive(void) {
 #if defined(DEBUG_PRINT_MSG_DATAGRAMS) || defined(DEBUG_PRINT_ACK_DATAGRAMS)
     if (received) {
 #ifdef DEBUG_PRINT_MSG_DATAGRAMS
-        Serial.print("Msg: ");
+        dbprint("Msg: ");
         Transceiver_obj.PrintMsgDatagram(Transceiver_obj.Msg_Datagram);
-        Serial.print('\n');
+        dbprint('\n');
 #endif
 #ifdef DEBUG_PRINT_ACK_DATAGRAMS
-        Serial.print("Ack: ");
+        dbprint("Ack: ");
         Transceiver_obj.PrintAckDatagram(Transceiver_obj.Ack_Datagram);
-        Serial.print('\n');
+        dbprint('\n');
 #endif
     }
 #endif
@@ -214,7 +213,7 @@ uint8_t receive(void) {
             digitalWrite(RUNLED_GPIO, LOW);
 
             // reconfigure the transceiver for pairing
-            Serial.println("Pairing");
+            dbprintln("Pairing");
             PairingInProgress=true;
             Transceiver_obj.HotConfig(false, Transceiver::DEF_TXID, Transceiver::DEF_MONOCHAN, Transceiver::DEF_PALEVEL);
             Rx_state=MONOFREQ;
@@ -222,6 +221,7 @@ uint8_t receive(void) {
     }
     
     if (Rx_state==MONOFREQ || Rx_state==MULTIFREQ) {
+        static uint16_t Reset_counter=0;  // number of consecutive missing datagrams while MULTIFREQ
         if (received) {
             Next_Eta_us=time_now_us+Transceiver_obj.Avg_Datagram_Period;
             Prev_number=Transceiver_obj.Msg_Datagram.number;
@@ -241,13 +241,12 @@ uint8_t receive(void) {
             }
         }
         else if (time_now_us>=Next_Eta_us+(Transceiver_obj.Avg_Datagram_Period/2)) {
-            //Serial.printf("Mis: n=%05u, timeout=%d\n", expected_number, time_now_us-Next_Eta_us);
+            //dbprintf("Mis: n=%05u, timeout=%d\n", expected_number, time_now_us-Next_Eta_us);
             if (Rx_state==MULTIFREQ) {
-                // reset if we counted 100 consecutive missing datagrams (Tx was turned off ?)
+                // reset if we counted COM_TRANS_ERRORS consecutive missing datagrams
                 Reset_counter++;
-                if (Reset_counter==100) {
-                    //Settings_obj.Save();
-                    Serial.println("Reboot after 100 consecutive missed datagrams");
+                if (COM_TRANS_ERRORS && Reset_counter==COM_TRANS_ERRORS) {
+                    dbprintf("Reboot after %d consecutive missed MSG datagrams\n", COM_TRANS_ERRORS);
                     EndProgram(true); // reset command
                 }
             }
@@ -272,7 +271,7 @@ uint8_t receive(void) {
                             uint16_t mono_channel=Transceiver_obj.Msg_Datagram.message[1];
                             uint16_t pa_level=Transceiver_obj.Msg_Datagram.message[2];
                             uint16_t session_key=Transceiver_obj.Msg_Datagram.message[3];
-                            Serial.printf("Received device_id=x%04x mono_channel=x%04x pa_level=%04x session_key=x%04x\n", 
+                            dbprintf("Received device_id=x%04x mono_channel=x%04x pa_level=%04x session_key=x%04x\n", 
                                 Transceiver_obj.Msg_Datagram.message[0],
                                 Transceiver_obj.Msg_Datagram.message[1],
                                 Transceiver_obj.Msg_Datagram.message[2],
@@ -301,7 +300,7 @@ uint8_t receive(void) {
                                     EndProgram(false); // halt command, could not save settings
 
                             if (PairingInProgress) {
-                                Serial.println("Pairing complete");
+                                dbprintln("Pairing complete");
                                 PairingComplete=true;
                                 // force reboot after sending enough datagrams informing Tx that pairing is complete on our side
                                 RebootTime=millis()+1000;
@@ -309,7 +308,7 @@ uint8_t receive(void) {
                             Received_tx_config=true;
 #ifdef DEBUG_RANDOM_DISCONNECT
                             uint16_t debug_disconnection_seed=GetRandomInt16();
-                            Serial.printf("debug: random disconnection seed=%u\n", debug_disconnection_seed);
+                            dbprintf("debug: random disconnection seed=%u\n", debug_disconnection_seed);
                             randomSeed(debug_disconnection_seed);
 #endif
                         }
@@ -317,7 +316,7 @@ uint8_t receive(void) {
                 }
                 else if (!PairingInProgress) {
                     Rx_state=MULTIFREQ;
-                    Serial.printf("MULTIFREQ after %lu ms, period=%lu µs\n", millis(), Transceiver_obj.Avg_Datagram_Period);
+                    dbprintf("MULTIFREQ after %lu ms, period=%lu µs\n", millis(), Transceiver_obj.Avg_Datagram_Period);
                     // assign values to the array of radio channels
                     Transceiver_obj.AssignChannels();
                     Stat_time_ms=millis(); // to compute error statistics every second
@@ -332,8 +331,8 @@ uint8_t receive(void) {
             // reset randomly to simulate connection loss
             if (random(500000)<10) {
                 // probability 1/240000 ~ 1 per 20 minutes on average at 100 dg/s = 1 / (240000 / 100 / (60 * 2))
-                Serial.printf("debug: random reboot after %lu minutes\n", millis()/60000);
-                Serial.println("----------------------------------------");
+                dbprintf("debug: random reboot after %lu minutes\n", millis()/60000);
+                dbprintln("----------------------------------------");
                 EndProgram(true); // reset command
             }
 #endif

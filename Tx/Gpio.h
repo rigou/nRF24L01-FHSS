@@ -11,13 +11,12 @@
 
 #pragma once
 
-// About GPIO usage:
-//  8 GPIOs available for ADC:                                                         32, 33, 34, 35, 36, 39
-// 16 GPIOs available for PWM: 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33
-// Used by             Gpio.h: 12, 13, 14,     16,     18, 19,         23,                             36
-// Used by          Tx/User.h:                     17,                                 32, 33, 34, 35,     39
-// Used by          Rx/User.h:                     17,                     25, 26, 27, 32, 33
-// notice: these pin assignemnts are optimized for NodeMCU-32 Dev board
+// These pin assignemnts are optimized for NodeMCU-32 Dev board
+// GPIOs available for ADC:     4,     12, 13, 14, 15,                 i2c i2c     25, 26, 27, 32, 33, 34, 35, 36, 39
+// GPIOs available for PWM: 0,  4,  5, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33
+// defined in       Gpio.h:     4,  5,             15, 16, 17, 18, 19,         23
+// defined in    Tx/User.h: 0,         12, 13, 14,                                 ch7 ch8     ch5 ch6 ch3 ch4 ch1 ch2
+// defined in    Rx/User.h:            ch7 ch8 ch6                                 ch3 ch4 ch5 ch1 ch2
 
 // About ADC usage:
 // ADC1 has 8 inputs, attached to GPIOs 32-39. 
@@ -26,28 +25,28 @@
 // ADC2 has 10 inputs, attached to GPIOs 0, 2, 4, 12-15 and 25-27
 //  ADC2 is used by the Wi-Fi driver : you can only use ADC2 when the Wi-Fi driver has not been started.
 
-// GPIOs used on both Tx & Rx -----------------------------
+// GPIOs used by both Tx & Rx -----------------------------
 
 #define RUNLED_GPIO   2 // 0 if not used
-#define ERRLED_GPIO  14 // 0 if not used
+#define ERRLED_GPIO  15 // 0 if not used
 #define PAIRING_GPIO 16 // the Pairing button
 
-#define SPI_CE_GPIO 4
-#define SPI_CS_GPIO 5
-// #define SPI_MOSI_GPIO 23 // default
-// #define SPI_MISO_GPIO 19 // default
+#define SPI_CE_GPIO 17
+#define SPI_CS_GPIO  5
 // #define SPI_SCK_GPIO  18 // default
+// #define SPI_MISO_GPIO 19 // default
+// #define SPI_MOSI_GPIO 23 // default
 
-#define POWERSENSOR_GPIO 36 // battery voltage sensor used only in Rx/User.cpp for now, will be implemented in Tx later
+#define POWERSENSOR_GPIO 4 // battery voltage sensor used only in Rx/User.cpp for now, will be implemented in Tx later
 
-// Tx GPIOs only ------------------------------------------
+// GPIOs used only by Tx -----------------------------
 
 // RF output level is hardware-encoded by 2 GPIOs : nc=not connected, gnd=connected to common ground
-// 	GPIO	PA_MIN	PA_LOW	PA_HIGH	PA_MAX
-// 	 12		  nc	 gnd	  nc	  gnd
-// 	 13		  nc	 nc	  	  gnd	  gnd
+// 	 GPIO	PA_MIN	PA_LOW	PA_HIGH	PA_MAX
+// PALEVEL0	  nc	 gnd	  nc	  gnd
+// PALEVEL1   nc	 nc	  	  gnd	  gnd
 #define PALEVEL0_GPIO 12
-#define PALEVEL1_GPIO 13
+#define PALEVEL1_GPIO 14
 
 // User-defined GPIOs --------------------------------------
 //

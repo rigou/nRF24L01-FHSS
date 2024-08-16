@@ -20,7 +20,7 @@
 // - it flashes rapidly when max_duration is reached and button is still pressed 
 // - it turns off when button is released
 // return value: enum BtnStates {BTN_PRESSED, BTN_RELEASED, BTN_REACHED_DURATION}
-BtnStates ReadBtn(byte btn_gpio, byte led_gpio, long max_duration) {
+BtnStates ReadBtn(uint8_t btn_gpio, uint8_t led_gpio, long max_duration) {
 	static bool Last_button_state=BTN_RELEASED; // default
 	static unsigned long Button_press_time=0; // ms since BTN_GPIO has been pressed
 	static bool Max_duration_complete_bool=false; // prevents returning more than one BTN_REACHED_DURATION while the button has not yet been released
@@ -79,7 +79,7 @@ BtnStates ReadBtn(byte btn_gpio, byte led_gpio, long max_duration) {
 // - if max_duration has been reached it returns BTN_REACHED_DURATION
 // - if button has been released before max_duration it returns BTN_RELEASED
 // - LED control is enabled if given led_gpio is non zero
-BtnStates ReadBtnBlock(byte btn_gpio, byte led_gpio, long max_duration) {
+BtnStates ReadBtnBlock(uint8_t btn_gpio, uint8_t led_gpio, long max_duration) {
 	BtnStates retval=BTN_PRESSED;
 	while (retval==BTN_PRESSED)
 		retval=ReadBtn(btn_gpio, led_gpio, max_duration);

@@ -66,15 +66,15 @@ void UserLoopMsg(uint16_t *message) {
     for (uint8_t idx=0; idx<sizeof(PWM_GPIOS); idx++) {
         uint16_t pulse=message[idx];
         Servo_obj[idx].write(pulse);
-        //if (Debug_print_counter%20==0) Serial.printf("Chan%d=%d ", idx+1, pulse);
+        //if (Debug_print_counter%20==0) dbprintf("Chan%d=%d ", idx+1, pulse);
     }
     // Turn on/off the Leds
     for (uint8_t idx=0; idx<sizeof(BIN_GPIOS); idx++) {
         uint8_t value=message[idx+sizeof(PWM_GPIOS)];
         digitalWrite(BIN_GPIOS[idx], value);
-        //if (Debug_print_counter%20==0) Serial.printf("Chan%d=%d ", idx+sizeof(PWM_GPIOS)+1, value);
+        //if (Debug_print_counter%20==0) dbprintf("Chan%d=%d ", idx+sizeof(PWM_GPIOS)+1, value);
     }
-    //if (Debug_print_counter%20==0) Serial.println("");
+    //if (Debug_print_counter%20==0) dbprintln("");
 }
 
 /* User loop code : outgoing Ack_Datagram

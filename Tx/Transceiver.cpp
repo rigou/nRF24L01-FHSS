@@ -30,15 +30,16 @@ Transceiver::Transceiver() {
 // because using higher pa_level would saturate the receiver and many datagrams would be lost
 // Return value: true=OK, false=hardware error (check your SPI connections)
 bool Transceiver::Config(bool is_tx, uint16_t tx_device_id, uint16_t mono_channel, uint16_t pa_level) {
-	// switch off/on the radio to reset it in case we restart after a software cpu reset with EndProgram(true)
-	Radio_obj.powerDown();
-	Radio_obj.powerUp();
+
 	if (!Radio_obj.begin()) {
 #ifdef DEBUG_SERIAL_ENABLED
-		Serial.println("radio hardware is not responding");
+		dbprintln("radio hardware is not responding");
 #endif
 		return false;
 	}
+
+	// turn off the radio during configuration
+	Radio_obj.powerDown();
 
 	// the RF24 library requires that custom ACK payloads are dynamically sized
 	// but we don't make use of this feature because our MsgDatagram and AckDatagram payloads have fixed sizes
@@ -85,11 +86,14 @@ bool Transceiver::Config(bool is_tx, uint16_t tx_device_id, uint16_t mono_channe
 		memset(&Ack_Datagram, 0, sizeof(AckDatagram));
         Radio_obj.writeAckPayload(1, &Ack_Datagram, sizeof(AckDatagram));
 	}
-    
-	Serial.printf("CPU %lu MHz, SPI %u kHz\n", getCpuFrequencyMhz(), SPI_SPEED/1000);
-	Serial.println("----------------------------------------");
+
+	// turn on the radio after configuration
+    Radio_obj.powerUp();
+
+	dbprintf("CPU %lu MHz, SPI %u kHz\n", getCpuFrequencyMhz(), SPI_SPEED/1000);
+	dbprintln("----------------------------------------");
     Radio_obj.printPrettyDetails(); // debug : print human readable data
-	Serial.println("----------------------------------------");
+	dbprintln("----------------------------------------");
 	return true;
 }
 
@@ -119,7 +123,7 @@ void Transceiver::HotConfig(bool is_tx, uint16_t tx_device_id, uint16_t mono_cha
 	// Set the fixed frequency
     Radio_obj.setChannel(mono_channel);
 	MonoChannel=mono_channel; // used later by AssignChannels()
-	Serial.printf("TxId %d, Chan %d, Pa_level %d\n", tx_device_id, mono_channel, pa_level);
+	dbprintf("TxId %x, Chan %d, Pa_level %d\n", tx_device_id, mono_channel, pa_level);
 }
 
 // Execution time
@@ -154,7 +158,7 @@ bool Transceiver::Send(uint16_t msg_type, uint16_t *message) {
 	else
 		retval=false;  // ACK datagram not received
 
-	//Serial.printf("Send time=%lu\n", micros() - start_timer);
+	//dbprintf("Send time=%lu\n", micros() - start_timer);
 	return retval;
 }
 
@@ -200,28 +204,28 @@ void Transceiver::compute_avg_datagram_period(void) {
 		if (First_datagram_time && Msg_Datagram.number >= First_datagram_number+2*AVG_COUNT) {
 			// stop timing and compute average delay
 			Avg_Datagram_Period=(micros()-First_datagram_time)/AVG_COUNT;
-			//Serial.printf("Avg_Datagram_Period = %u us\n", Avg_Datagram_Period);
+			//dbprintf("Avg_Datagram_Period = %u us\n", Avg_Datagram_Period);
 		}
 	}
 	else {
 		// missed a datagram : restart avg computation
 		First_datagram_time=0;
 		First_datagram_number=Msg_Datagram.number;
-		Serial.println("synchronizing");
+		dbprintln("synchronizing");
 	}
 	Previous_datagram_number=Msg_Datagram.number;
 }
 
 void Transceiver::PrintMsgDatagram(MsgDatagram datagram) {
-	Serial.printf("%04x T%x ", datagram.number, datagram.type);
+	dbprintf("%04x T%x ", datagram.number, datagram.type);
 	for (uint8_t idx=0; idx<MSGVALUES; idx++)
-		Serial.printf("x%04x ", datagram.message[idx]);
+		dbprintf("x%04x ", datagram.message[idx]);
 }
 
 void Transceiver::PrintAckDatagram(AckDatagram datagram) {
-	Serial.printf("%04x T%x ", datagram.number, datagram.type);
+	dbprintf("%04x T%x ", datagram.number, datagram.type);
 	for (uint8_t idx=0; idx<ACKVALUES; idx++)
-		Serial.printf("x%04x ", datagram.message[idx]);
+		dbprintf("x%04x ", datagram.message[idx]);
 }
 
 // Fill given values_out array with distinct random values in the range 0-max_value except given ignored values
@@ -266,13 +270,13 @@ void Transceiver::arrange_values(
 void Transceiver::AssignChannels(void) {
 	arrange_values(GetSessionKey(), DEF_MAXCHAN, DEF_MONOCHAN, MonoChannel, sizeof(RF24Channels), RF24Channels);
 	/*
-	Serial.printf("AssignChannels(%d)\n", GetSessionKey());
+	dbprintf("AssignChannels(%d)\n", GetSessionKey());
 	for (uint8_t idx=0; idx<sizeof(RF24Channels); idx++) {
-		Serial.printf("%02d ",RF24Channels[idx]);
+		dbprintf("%02d ",RF24Channels[idx]);
 		if (idx%10 == 9)
-			Serial.print('\n');
+			dbprint('\n');
 	}
-	Serial.print('\n');
+	dbprint('\n');
 	*/
 }
 
@@ -280,7 +284,7 @@ void Transceiver::AssignChannels(void) {
 uint8_t Transceiver::SetChannel(uint16_t dg_number) {
 	uint8_t retval=RF24Channels[dg_number % sizeof(RF24Channels)];
     Radio_obj.setChannel(retval);
-	//Serial.printf("SetChannel(%d) returns %d\n", dg_number, retval);
+	//dbprintf("SetChannel(%d) returns %d\n", dg_number, retval);
 	return retval;
 }
 

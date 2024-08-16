@@ -33,6 +33,10 @@
 // more datagrams transmitted per second implies less time available for your processing in User.cpp
 #define COM_TRANS_DGS   100
 
+// reset MCU if we counted COM_TRANS_ERRORS consecutive missing datagrams
+// 0 = never reset
+#define COM_TRANS_ERRORS 200
+
 // highest radio channel value allowed in your country
 // your local laws may not allow the full frequency range (authorized frequencies in France: 2400-2483.5 MHz)
 // values: 0-125, actual frequency=2400+channel, eg 2483 MHz for channel 83
@@ -59,6 +63,22 @@
 //	 and obviously ART_DELAY(µs) * ART_ATTEMPTS must be smaller than 1000000/COM_TRANS_DGS
 // 	Alternatively, if transmission errors are acceptable then set ART_ATTEMPTS=0 to disable auto retransmission entirely
 #define COM_ART_ATTEMPTS 0
+
+// Debug settings ----------------------------------------
+
+// 0=debug off, 1=debug to serial, 2=debug to serial and optionally bluetooth with dbtprintln()
+#define DEBUG_ON 1
+
+// all debug output is handled with these macros, Serial is never called directly for debug tracing
+#if DEBUG_ON
+#define dbprint(...)   Serial.print(__VA_ARGS__)
+#define dbprintln(...) Serial.println(__VA_ARGS__)
+#define dbprintf(...)  Serial.printf(__VA_ARGS__)
+#else
+#define dbprint(...)
+#define dbprintln(...)
+#define dbprintf(...)
+#endif
 
 // Common library -----------------------------------------
 
