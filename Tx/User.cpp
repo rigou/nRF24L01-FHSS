@@ -8,9 +8,19 @@
 */
 
 #include <Arduino.h> // for Serial
-#include "User.h"
 #include "Common.h" // for GPIOs definitions
 #include "Gpio.h"
+#include "User.h"
+
+#if DEBUG_ON == 2
+#include "rgSerialBT.h"
+#endif
+
+// 0=debug off, 1=output to serial, 2=output to serial and optionally bluetooth with dbtprintln()
+#define DEBUG_ON 1
+// 0=trace off, 1=output to serial, 2=output to serial and optionally bluetooth with trbtprintln()
+#define TRACE_ON 0
+#include <rgDebug.h>
 
 extern uint16_t ErrorCounter;  // number of transmission errors per second, updated once/second
 
@@ -27,14 +37,31 @@ const uint8_t BIN_GPIOS[]={USR_CHAN5_GPIO, USR_CHAN6_GPIO};
 const uint16_t  MIN_PULSE_WIDTH=500;    // the shortest pulse sent to a servo  
 const uint16_t  MAX_PULSE_WIDTH=2500;   // the longest pulse sent to a servo 
 
-// User setup example code
-void UserSetup(void) {
+// User setup code
+void UserSetup(int device_id) {
+    trprintf("*** %s %s() begin\n", __FILE_NAME__, __FUNCTION__);
+
     // set the ADC resolution to 10 bits (0-1023) for probing channels 1,2,3 (potentiometers)
 	analogReadResolution(10);
 
     // initialize the digital inputs (switches)
     for (uint8_t idx=0; idx<sizeof(BIN_GPIOS); idx++)
         pinMode(BIN_GPIOS[idx], INPUT_PULLUP);
+
+#if DEBUG_ON == 2
+    char bt_name[7]; // the name listed in the list of available bluetooth devices
+	snprintf(bt_name, sizeof(bt_name), "Tx%04X", device_id);
+    if (!bt_Begin(bt_name))
+		dbprintln("Bluetooth failed");
+#endif
+
+	trprintf("*** %s %s() returns\n", __FILE_NAME__, __FUNCTION__);
+}
+
+// User loop code : called at the beginning of loop() for each datagram
+// Return value: user defined
+int UserLoopBegin(void) {
+	return 0;
 }
 
 /* User loop code : outgoing Msg_Datagram
@@ -49,8 +76,9 @@ void UserSetup(void) {
    [3]  value of USR_CHAN4_GPIO (P4)
    [4]  state of USR_CHAN5_GPIO (SW1)
    [5]  state of USR_CHAN6_GPIO (SW2)
+   // Return value: user defined
 */
-void UserLoopMsg(uint16_t *message) {
+int UserLoopMsg(uint16_t *message) {
     //static uint16_t Debug_print_counter=0; Debug_print_counter++;
 
     // Read the potentiometers
@@ -67,6 +95,7 @@ void UserLoopMsg(uint16_t *message) {
         //if (Debug_print_counter%20==0) dbprintf("Chan%d=%d ", idx+sizeof(DAC_GPIOS)+1, value);
     }
     //if (Debug_print_counter%20==0) dbprintln("");
+    return 0;
 }
 
 /* User loop code : incoming Ack_Datagram
@@ -76,14 +105,18 @@ void UserLoopMsg(uint16_t *message) {
    Example message layout:
    [0]  Receiver errors count
    [1]  Receiver power supply voltage
+   // Return value: user defined
 */
-void UserLoopAck(uint16_t *message) {
+int UserLoopAck(uint16_t *message) {
     // Example: display the Tx error count and the data received from Rx: Rx error count and power supply voltage
     static unsigned long Last_time=0; // ms
     if (millis()>=Last_time+1000) {
+#if DEBUG_ON
         uint16_t rx_errors=message[0];  // Rx error count
         uint16_t rx_voltage=message[1]; // Rx power supply voltage
-        dbprintf("Tx %u errors, Rx %u errors, %u mV\n", ErrorCounter, rx_errors, rx_voltage);
+        dbtprintf("Tx %u errors, Rx %u errors, %u mV\n", ErrorCounter, rx_errors, rx_voltage);
+#endif
         Last_time=millis();
     }
+    return 0;
 }

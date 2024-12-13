@@ -17,9 +17,8 @@
  * This class is derived from original code found at https://en.wikipedia.org/wiki/Xorshift#xorwow
 */
 
-#include "rgStrLib.h"
+#include "rgStr.h"
 #include "rgCsv.h"
-
 #define CELLIDX(y,x) (((y)*mMaxcells_int)+(x))
 
 /* Public interface **********************************************************/
@@ -29,20 +28,24 @@
 	maxlines_int	max number of data lines in the csv file (not counting blank lines and comments)
 	maxcells_int	max number of cells per line
 	maxcellen_int	max number of characters per cell (including leading and trailing spaces, if any)
-   This method mounts the LittleFS file system if it is not already mounted
+	create_bool		create the file if it does not exist
+   Prerequisite: the LittleFS file system is already formatted
+   This method mounts the LittleFS file system if it is not already mounted, but does not format it
+    and returns error -1 if it has not been done yet
    The maximum length of a line in the csv file is (maxcells_int*maxcellen_int)+maxcells_int-1 including
    whitespace and comments ; if a line is too long then Load() will fail
-   Return value: 0=success, -1=filesystem not found, -2=file not found, -3=out of memory
+   Return value: 0=success, -1=filesystem not found, -2=file not found if create_bool==false, -3=out of memory
 */
-int rgCsv::Open(const char *path_str, 
+int rgCsv::Allocate(const char *path_str, 
 	int maxlines_int, 
 	int maxcells_int, 
-	int maxcellen_int
+	int maxcellen_int,
+	bool create_bool
 ) {
 	int retval_int=0;
 	if (LittleFS.begin(false)) {
 		if (mPath_str || mCells)
-			Close();
+			Release();
 		mPath_str=(char *)calloc(strlen(path_str)+2, sizeof(char)); // +1 for the optional '/', +1 for the final '\0'
 		if (mPath_str) {
 			byte offset=0;
@@ -51,7 +54,7 @@ int rgCsv::Open(const char *path_str,
 				offset=1;
 			}
 			strncpy(mPath_str+offset, path_str, strlen(path_str));
-			if (LittleFS.exists(mPath_str)) {
+			if (LittleFS.exists(mPath_str) || create_bool) {
 				mMaxlines_int=maxlines_int;
 				mMaxcells_int=maxcells_int;
 				mMaxcellen_int=maxcellen_int;
@@ -76,21 +79,25 @@ int rgCsv::Open(const char *path_str,
 	}
 	else
 		retval_int=-1; // filesystem not found
-	
 	return retval_int;
 }
 
-/* call this method to free the resources allocated by Open()
+/* call this method to release the resources allocated by Allocate()
    This method leaves the LittleFS file system mounted
 */
-void rgCsv::Close(void) {
-	if (mPath_str)
+void rgCsv::Release(void) {
+	if (mPath_str) {
 		free(mPath_str);
+		mPath_str=NULL;
+	}
 	if (mCells) {
 		for (int idx=0; idx<mMaxlines_int*mMaxcells_int; idx++) {
-			if (mCells[idx].value_str)
+			if (mCells[idx].value_str) {
 				free(mCells[idx].value_str);
+				mCells[idx].value_str=NULL;
+			}
 		}
+		mCells=NULL;
 	}
 }
 
@@ -207,10 +214,14 @@ int rgCsv::Load(void) {
 }
 
 // return value: number of lines written, negative value on error  (do not modify these negative values)
-int rgCsv::Save(void) {
+// lines_int optional, number of lines to save when creating a file (Load() was not called in this case, and mLines_int=0)
+int rgCsv::Save(int lines_int) {
 	int retval_int=0;
 	int line_int=0;
-			
+	
+	if (lines_int>0)
+		mLines_int=lines_int;
+
 	// truncate existing file
 	LittleFS.remove(mPath_str);
     File file_obj=LittleFS.open(mPath_str,"w");
@@ -244,21 +255,27 @@ int rgCsv::Save(void) {
 					break;
 				}
 				line_int++;
+				//Serial.printf("rgCsv::Save() line %d\n", line_int);
 			}
 			free(linebuff_str);
 		}
 		file_obj.close();
     }
-    else
+    else {
+		//Serial.printf("rgCsv::Save() error creating file %s\n", mPath_str);
         retval_int=-1; // i/o error creating file
+	}
 
     if (retval_int == 0)
         retval_int=line_int;
+
+	//Serial.printf("rgCsv::Save() returns %d\n", retval_int);
     return retval_int;
 }
 
-int rgCsv::GetIntCell(byte line_int, byte column_int) {
-	int retval_int=-1;
+// return value: 0=success, <0 on error
+int16_t rgCsv::GetIntCell(byte line_int, byte column_int) {
+	int16_t retval_int=-1;
 	if (line_int<mMaxlines_int && column_int<mMaxcells_int)
 		retval_int=mCells[CELLIDX(line_int, column_int)].value_int;
 	//Serial.printf("GetIntCell(%d, %d) returns %d\n", line_int, column_int, retval_int);
@@ -266,7 +283,8 @@ int rgCsv::GetIntCell(byte line_int, byte column_int) {
 }
 
 // if the cell contains an existing string value then this value will be NULLed
-int rgCsv::SetIntCell(byte line_int, byte column_int, int new_value_int) {
+// return value: 0=success, <0 on error
+int rgCsv::SetIntCell(byte line_int, byte column_int, int16_t new_value_int) {
 	int retval_int=0;
 	if (line_int<mMaxlines_int && column_int<mMaxcells_int) {
 		retval_int=SetStrCell(line_int, column_int, NULL);
@@ -277,6 +295,7 @@ int rgCsv::SetIntCell(byte line_int, byte column_int, int new_value_int) {
 	return retval_int;
 }
 
+// return value: 0=success, NULL on error
 const char *rgCsv::GetStrCell(byte line_int, byte column_int) {
 	const char *retval_str=NULL;
 	if (line_int<mMaxlines_int && column_int<mMaxcells_int)
@@ -287,6 +306,7 @@ const char *rgCsv::GetStrCell(byte line_int, byte column_int) {
 
 // if the cell contains an existing integer value then this value will be zeroed
 // a zero-length new_value_str or a NULL value will be stored as a Cell_struct {0, NULL}
+// return value: 0=success, <0 on error
 int rgCsv::SetStrCell(byte line_int, byte column_int, const char *new_value_str) {
 	int retval_int=0;
 		
@@ -430,6 +450,6 @@ int rgCsv::read_line(File *file_obj, int buffer_size_int, char *buffer_out_str) 
 	}
 	if (retval_int==-1 && char_counter_int==0)
 		retval_int=-2; // EOF
-	//Serial.printf("debug: %s\t(%d)\n", buffer_out_str, retval_int);
+	//Serial.printf("read_line() \"%s\"\t(%d)\n", buffer_out_str, retval_int);
 	return retval_int;
 }

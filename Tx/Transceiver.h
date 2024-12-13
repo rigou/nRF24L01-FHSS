@@ -25,10 +25,12 @@ class Transceiver {
         
     public:
         // the Tx device identifier used while pairing devices
-		static const uint16_t DEF_TXID=0x2401;
+		static const uint16_t DEF_TXID=0x100; // decimal 256
+        // the Rx device identifier used while pairing devices
+		static const uint16_t DEF_RXID=0x200; // decimal 512
 
         // the channel used for transmitting in single frequency while pairing devices
-        static const uint8_t DEF_MONOCHAN=64;
+        static const uint8_t DEF_MONOCHAN=0x40; // decimal 64
  
         // channel values: 0-125, actual frequency=2400+channel, eg 2483 MHz for channel 83
         // your local laws may not allow the full frequency range (authorized frequencies in France: 2400-2483.5 MHz)
@@ -42,10 +44,9 @@ class Transceiver {
         static const uint8_t DGT_SERVICE=0x1;
         static const uint8_t DGT_USER=0x2;
         static const uint8_t DGT_SYNCHRONIZED=0x4;
-        static const uint8_t DGT_PAIRING_INPROGRESS=0x8;
-        static const uint8_t DGT_PAIRING_COMPLETE=0x10;
+        static const uint8_t DGT_PAIRING=0x8;
      
-        static const uint8_t MSGVALUES=COM_MSGVALUES; // min=4, max=14 (4 values are used by service datagrams sent by Tx while running in MONOFREQ mode)
+        static const uint8_t MSGVALUES=COM_MSGVALUES; // min=5, max=14 (5 values are used by service datagrams sent by Tx while running in MONOFREQ mode)
         struct MsgDatagram {
             uint16_t number; // 0 - 65535
             uint16_t type;  // see above
@@ -61,23 +62,21 @@ class Transceiver {
         };
         AckDatagram Ack_Datagram; // sent from Rx -> Tx
 
-        micros_t Avg_Datagram_Period=0; // microsec, computed by Receive()
+        micros_t Avg_Datagram_Period=0; // microsec, computed by compute_avg_datagram_period()
 
         Transceiver();
-        bool Config(bool is_tx, uint16_t tx_device_id, uint16_t mono_channel, uint16_t pa_level);
-        void HotConfig(bool is_tx, uint16_t tx_device_id, uint16_t mono_channel, uint16_t pa_level);
+        bool Setup(bool is_tx, uint16_t tx_device_id, uint16_t rx_device_id, uint16_t mono_channel, uint16_t pa_level);
         bool Send(uint16_t msg_type, uint16_t *message);
         bool Receive(uint16_t ack_type, uint16_t *ack_message);
         void PrintMsgDatagram(MsgDatagram datagram);
         void PrintAckDatagram(AckDatagram datagram);
         void AssignChannels(void);
-        uint8_t SetChannel(uint16_t dg_number);
+        uint8_t GetChannel(void);
+        void SetChannel(uint16_t dg_number);
         void SetPaLevel(int value);
         uint16_t GetSessionKey(void);
         void SetSessionKey(uint16_t key);
-        void GetTransmissionId(char *value_out);
-        void SetTransmissionId(uint16_t device_id);
-
+        
     private:
         
         RF24 Radio_obj;
@@ -86,11 +85,6 @@ class Transceiver {
         // see Gpio.h for SPI gpios assignments
         static const unsigned int SPI_SPEED=2000000; // Hz, see ARDUINO/Espressif/SPI_MasterSlave/doc/spi_clock_frequency_information.txt
 
-        // This string uniquely identifies the data stream between the transmitter and the receiver
-        // if another pair of transmitter/receiver is running in the neighbourhood, they should use a different identifier
-        // value is set by Config(), either derived from DEF_TXID or read in Settings (key "TRANSID")
-        uint8_t TransmissionId[5];
-    
         // the channel used for transmitting in single frequency, it is set by Config()
         // it does not belong to the RF24Channels[] array, it is used by AssignChannels()
         // value is either DEF_MONOCHAN or read in Settings (key "SINFRCHAN")
@@ -102,11 +96,12 @@ class Transceiver {
         // a randomized array of all radio channels used for frequency hopping
         // MonoChannel and DEF_MONOCHAN are not in the array
         uint8_t RF24Channels[DEF_MAXCHAN-1];
-        uint16_t Session_key=0; // seed used to randomize the RF24Channels[] array
+        uint16_t SessionKey=0; // random seed used to generate the RF24Channels[] array
 
         rgRng Random_obj;
 
-        void compute_avg_datagram_period(void);
+        void get_bytes(uint8_t bytes[], uint64_t number, uint8_t count);
+        void compute_avg_datagram_period(uint16_t dg_number);
         void arrange_values(const unsigned int key, const uint8_t max_value, const uint8_t ignored_value1, const uint8_t ignored_value2, const uint8_t sizeof_values_out, uint8_t *values_out);
 
 };

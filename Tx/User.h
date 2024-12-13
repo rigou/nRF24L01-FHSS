@@ -10,9 +10,17 @@
 #pragma once
 #include <cstdint> // for uint16_t
 
-void UserSetup(void);
-void UserLoopMsg(uint16_t *message);
-void UserLoopAck(uint16_t *message);
+void UserSetup(int device_id);
+int UserLoopBegin(void);
+int UserLoopMsg(uint16_t *message);
+int UserLoopAck(uint16_t *message);
+
+// RF output level is hardware-encoded by 2 GPIOs : nc=not connected, gnd=connected to common ground
+// 	 GPIO	PA_MIN	PA_LOW	PA_HIGH	PA_MAX
+// PALEVEL0	  nc	 gnd	  nc	  gnd
+// PALEVEL1   nc	 nc	  	  gnd	  gnd
+#define PALEVEL0_GPIO 12
+#define PALEVEL1_GPIO 14
 
 // User may add code after this line ------------------------------------------
 
@@ -25,3 +33,6 @@ void UserLoopAck(uint16_t *message);
 #define USR_CHAN4_GPIO 35 // analog, connected to P4
 #define USR_CHAN5_GPIO 32 // digital, connected to SW1
 #define USR_CHAN6_GPIO 33 // digital, connected to SW2
+#define USR_CHAN7_GPIO 25 // possible additional channel on ADC2 available only if WiFi is not used
+#define USR_CHAN8_GPIO 26 // possible additional channel on ADC2 available only if WiFi is not used
+

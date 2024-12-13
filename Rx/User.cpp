@@ -13,6 +13,12 @@
 #include "Common.h"
 #include "Gpio.h"
 
+// 0=debug off, 1=output to serial, 2=output to serial and optionally bluetooth with dbtprintln()
+#define DEBUG_ON 1
+// 0=trace off, 1=output to serial, 2=output to serial and optionally bluetooth with trbtprintln()
+#define TRACE_ON 0
+#include <rgDebug.h>
+
 extern uint16_t ErrorCounter;  // number of missing datagrams per second, updated once/second
 
 // ADC input at POWERSENSOR_GPIO, compute 2 average values/s, use 10 bit sample resolution

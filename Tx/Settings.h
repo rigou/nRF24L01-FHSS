@@ -23,33 +23,41 @@ class Settings : public rgCsv {
 		# Line length 25 chr max
 		# Do not change the order
 		# of the lines
-		TXID,64540
-		MONOCHAN,78
+		TXID,256
+		RXID,512
+		MONOCHAN,64
 		PALEVEL,0
 		*/
-		const char *PARFILE="param.csv";
-				
+		static const int PAR_MAXLINES=4;
+		static const int PAR_MAXCELLS=2;
+		static const int PAR_MAXCELLEN=12;
+		
+		int create_settings(uint16_t tx_deviceid, uint16_t rx_deviceid, uint8_t mono_chan, uint8_t pa_level);
+		
 	public:
+		const char *PARFILE="/param.csv";
+
 		/* inherited methods
 		int Open(const char *path_str, int maxlines_int, int maxcells_int, int maxcellen_int);
 		void Close(void);
 		int Load(void);
 		int Save(void);
-		int GetIntCell(byte line_int, byte column_int);
-		int SetIntCell(byte line_int, byte column_int, int new_value_int);
+		int16_t GetIntCell(byte line_int, byte column_int);
+		int SetIntCell(byte line_int, byte column_int, int16_t new_value_int);
 		const char *GetStrCell(byte line_int, byte column_int);
 		int SetStrCell(byte line_int, byte column_int, const char *new_value_str);
 		*/
-
-		static const uint8_t NO_BUTTON=255;
 		
-	    int Init(uint8_t button_gpio, uint8_t led_gpio, 
-			uint16_t default_tx_deviceid, 
-			uint8_t default_mono_chan, 
-			uint8_t default_pa_level);
-
-		int GetDeviceId(void);
-		bool SetDeviceId(int value);
+	    int Init(
+			uint16_t default_tx_deviceid,
+			uint16_t default_rx_deviceid,
+			uint8_t default_mono_chan,
+			uint8_t default_pa_level
+		);
+		int GetTxDeviceId(void);
+		bool SetTxDeviceId(int value);
+		int GetRxDeviceId(void);
+		bool SetRxDeviceId(int value);
 		int GetMonoChannel(void);
 		bool SetMonoChannel(int value);
 		

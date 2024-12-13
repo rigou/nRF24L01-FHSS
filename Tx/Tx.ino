@@ -5,19 +5,25 @@
  * See the GNU General Public License for more details : https://www.gnu.org/licenses/ *GPL 
  *
  * Installation, usage : https://github.com/rigou/nRF24L01-FHSS/
- * 
- * Pairing procedure :
- * 1. Turn off Rx & Tx
- * 2. Turn on Tx                - the led flashes rapidly
- * 3. Press the Pairing button  - the led turns on and after 3 s it flashes rapidly
- * 4. Release the button        - the led flashes every 3 s, Tx is ready for pairing with Rx
- * 5. Turn on Rx                - the led flashes rapidly
- * 6. Press the Pairing button  - the led turns on and after 3 s it flashes rapidly
- * 7. Release the button        - Rx starts pairing with Tx
- * 8. Rx & Tx reboot after 1 s  - both leds flash rapidly for 1 s then flash briefly once per second
- * 9. Rx & Tx are paired and transmitting data.
- * 
- * Run minicom to display the debug log issued by dbprint() :
+ 
+ ********************
+ * Pairing procedure
+ ********************
+ * 1. power off Rx & Tx
+ * 2. Press the Pairing button on Rx, and power it on while holding down the Pairing button 
+ *      -> the Rx led turns on and after 3 s it flashes very fast (20 Hz)
+ * 3. Release the Pairing button
+ * 4. Power on Tx   
+ *      -> the Tx led flashes rapidly (2 Hz)
+ * 5. Press the Pairing button on Tx and hold it down
+ *      -> the Tx led turns on and after 3 s it flashes very fast (20 Hz)
+ * 6. Release the Pairing button
+ *      -> after a few seconds Rx and Tx leds start flashing slowly (0.5 Hz) : Rx & Tx are paired and transmitting data
+ 
+ *******************************
+ * How to display the debug log
+ *******************************
+ * Open a shell and run minicom to display the debug log :
     LOG="$HOME/Downloads/$(date '+%Y-%m-%dT%H:%M:%S')_rf24Tx.log" ; minicom -C "$LOG" -D /dev/ttyUSB0
     LOG="$HOME/Downloads/$(date '+%Y-%m-%dT%H:%M:%S')_rf24Rx.log" ; minicom -C "$LOG" -D /dev/ttyUSB1
  * type Ctrl-A U    to terminate text lines with CR+LF for proper display 
@@ -46,26 +52,30 @@
 #include "Gpio.h"
 #include "Settings.h"
 #include "Transceiver.h"
-#include <rgButton.h>
+#include <rgBtn.h>
+#include <rgCsv.h>
 #include "User.h"
+
+// 0=debug off, 1=output to serial, 2=output to serial and optionally bluetooth with dbtprintln()
+#define DEBUG_ON 1
+// 0=trace off, 1=output to serial, 2=output to serial and optionally bluetooth with trbtprintln()
+#define TRACE_ON 0
+#include <rgDebug.h>
 
 Settings Settings_obj;
 Transceiver Transceiver_obj;
 
 #define APP_NAME "Tx"
-#define APP_VERSION "1.6.5"
+#define APP_VERSION "1.9.0"
 
 // Debug stuff
-//
-// Simulate Rx random disconnections to test automatic connection recovery
-//#define DEBUG_RANDOM_DISCONNECT
 //
 // Printing datagrams consumes 2300 µs
 //#define DEBUG_PRINT_MSG_DATAGRAMS 
 //#define DEBUG_PRINT_ACK_DATAGRAMS
 
 // Tx and Rx start in monofrequency and they both switch to MULTIFREQ after Rx tells Tx that it is synchronized
-// Pairing may be started in MONOFREQ or MULTIFREQ, which sets the state back to MONOFREQ, and is actually performed while MONOFREQ
+// Pairing may be started by pressing the Pairing button while in MONOFREQ
 // User data is transmitted while MULTIFREQ
 enum TxStates {MONOFREQ, MULTIFREQ};
 TxStates Tx_state=MONOFREQ;
@@ -81,6 +91,7 @@ uint16_t ErrorCounter=0;  // number of transmission errors per second, updated o
 // Acceptable CPU speed for DGPERIOD=10000 : 80-240 MHz on Tx and/or Rx
 // Larger delays increase the time available for your application data processing between datagrams
 const micros_t DGPERIOD=1000000/COM_TRANS_DGS; // microseconds, must be multiple of 100
+
 bool PairingInProgress=false;
 
 // Autorepeat timer used to transmit datagrams periodically
@@ -92,15 +103,15 @@ void ARDUINO_ISR_ATTR onTimer(){
     xSemaphoreGiveFromISR(Semaphore_obj, NULL);
 }
 
-// #define SCOPE_GPIO 17 // the oscilloscope probe
-
 void setup() {
     Serial.begin(115200);
-    while (!Serial) ; // wait for serial port to connect   
-	//dbprint('\n'); for (uint8_t idx = 0; idx<4; idx++) { dbprint((char)('A'+idx)); delay(500); } // debug
-    dbprintf("\n\n%s %s\n", APP_NAME, APP_VERSION);
-
-    // pinMode(SCOPE_GPIO, OUTPUT);
+    while (!Serial) ; // wait for serial port to connect
+// #if DEBUG_ON
+// 	dbprint('\n'); for (uint8_t idx = 0; idx<6; idx++) { dbprint((char)('A'+idx)); delay(500); }
+// #endif
+    dbprintf("\n\n*** %s %s() : %s %s\n", __FILE_NAME__, __FUNCTION__, APP_NAME, APP_VERSION);
+    dbprintf("using library %s %s\n", BTNLIB_NAME, BTNLIB_VERSION);
+    dbprintf("using library %s %s\n", CSVLIB_NAME, CSVLIB_VERSION);
     pinMode(PAIRING_GPIO, INPUT_PULLUP);
     if (RUNLED_GPIO)
         pinMode(RUNLED_GPIO, OUTPUT);
@@ -109,32 +120,71 @@ void setup() {
 	pinMode(PALEVEL0_GPIO, INPUT_PULLUP);
 	pinMode(PALEVEL1_GPIO, INPUT_PULLUP);
     digitalWrite(RUNLED_GPIO, HIGH);
-                
+
+    // mount the file system, format it if not already done
+    if (!LittleFS.begin(true))
+        EndProgram(true, "Init: file system formatting error");
+
+    // Hold the Pairing button during boot to delete the settings file
+    const int BUTTON_HOLD=3000; // ms, hold the button long enough to create a new file with default values
+    BtnStates btn_state=ReadBtnBlock(PAIRING_GPIO, RUNLED_GPIO, BUTTON_HOLD); // ms
+    if (btn_state==BTN_REACHED_DURATION) {
+        if (LittleFS.exists(Settings_obj.PARFILE)) {
+            if (LittleFS.remove(Settings_obj.PARFILE))
+                dbprintln("Setup: settings file deleted");
+            else
+                dbprintln("Setup: error deleting settings file"); // continue anyway
+        }
+        else
+            dbprintf("Setup: settings file \"%s\" not found\n", Settings_obj.PARFILE);
+    }
+
     // Open the settings file, create it if it does not exist
     // default values are provided only for creating the settings file
-    if (Settings_obj.Init(PAIRING_GPIO, RUNLED_GPIO, Transceiver::DEF_TXID, Transceiver::DEF_MONOCHAN, Transceiver::DEF_PALEVEL)!=0)
-        EndProgram(false); // halt command
+    if (Settings_obj.Init(Transceiver::DEF_TXID, Transceiver::DEF_RXID, Transceiver::DEF_MONOCHAN, Transceiver::DEF_PALEVEL))
+        EndProgram(true, "Init: Settings file error");
 
-    // read the transceiver settings
-    int device_id=(uint16_t)Settings_obj.GetDeviceId();
+    // read the transceiver settings from the settings file
+    int tx_device_id=Settings_obj.GetTxDeviceId();
+    int rx_device_id=Settings_obj.GetRxDeviceId();
     int mono_channel=Settings_obj.GetMonoChannel();
-    if (device_id < 0 || mono_channel<0)
-        EndProgram(false); // halt command
+    if (tx_device_id < 0 || rx_device_id < 0 || mono_channel<0) {
+        const char *message=NULL;
+        if (tx_device_id < 0)
+            message="tx_device_id not found";
+        if (rx_device_id < 0)
+            message="rx_device_id not found";
+        if (mono_channel<0)
+            message="mono_channel not found";
+        EndProgram(true, message);
+    }
     int pa_level=read_pa_level_switch(PALEVEL0_GPIO, PALEVEL1_GPIO);
+    dbprintf("setup() TxId 0x%06x, RxId 0x%06x, Chan 0x%02x (%d), Pa_level %d\n",
+        tx_device_id, rx_device_id, mono_channel, mono_channel, pa_level);
 
-    if (device_id==Transceiver::DEF_TXID) {
-        // if this is the first boot ever, assign random values to settings "TXID" and "MONOCHAN"
-        device_id=GetRandomInt16();
+    if (tx_device_id==(int)Transceiver::DEF_TXID) {
+        // if this is the first boot ever, assign random values to settings "TXID", "RXID" and "MONOCHAN"
+        dbprintln("Settings initialization");
+        tx_device_id=GetRandomInt16() & 0x7fff; // keep only 15 bits to ensure it is a positive when stored in a int16_t
+        rx_device_id=tx_device_id;
+        while(rx_device_id==tx_device_id)
+            rx_device_id=GetRandomInt16() & 0x7fff;
         mono_channel=Transceiver::DEF_MONOCHAN;
         while (mono_channel==Transceiver::DEF_MONOCHAN)
             mono_channel=GetRandomInt16()%(Transceiver::DEF_MAXCHAN+1);
-        Settings_obj.SetDeviceId(device_id);
+        Settings_obj.SetTxDeviceId(tx_device_id);
+        Settings_obj.SetRxDeviceId(rx_device_id);
         Settings_obj.SetMonoChannel(mono_channel);
-        Settings_obj.Save();
+        if (Settings_obj.Save()<0)
+            EndProgram(true, "Settings write error"); // halt command, could not save settings
     }
     
     // Configure the transceiver
-    Transceiver_obj.Config(true, device_id, mono_channel, pa_level);
+    Transceiver_obj.Setup(true, tx_device_id, rx_device_id, mono_channel, pa_level);
+
+    // assign values to the array of radio channels
+    Transceiver_obj.SetSessionKey(GetRandomInt16()); // random seed used to generate the RF24Channels[] array
+    Transceiver_obj.AssignChannels();
 
     // clear data in the MSG message buffer : datagram number 0 will contain only zeros
     memset(Msg_message, 0, sizeof(Msg_message));
@@ -152,35 +202,35 @@ void setup() {
     timerAlarm(Timer_obj, DGPERIOD/100, true, 0);
 
     // Run user setup code
-    UserSetup();
+    UserSetup(rx_device_id);
 
-    dbprintf("Starting after %lu ms\n", millis());
+    trprintf("*** %s %s() returns after %lu ms\n", __FILE_NAME__, __FUNCTION__, millis());
 }
 
 void loop() {
     bool result=true;
     if (xSemaphoreTake(Semaphore_obj, 0) == pdTRUE) {
         // micros_t start_timer = micros();
+        if (UserLoopBegin())
+            return; // do not transmit anything while in "Command" mode
         
-        // datagrams transmitted before reaching the MULTIFREQ state 
-        // are reserved for the internal workings of this program
-        // you cannot use them
         if (Tx_state==MULTIFREQ) {
+            // fill up the message datagram with user's data
             Msg_type=Transceiver::DGT_USER;
             memset(Msg_message, 0, sizeof(Msg_message));
             UserLoopMsg(Msg_message);
         }
         else {
-            // datagrams transmitted before reaching the MULTIFREQ state are Service datagrams,
+            // datagrams transmitted before reaching the MULTIFREQ state are service datagrams,
             // they are reserved for the internal workings of this program, and you cannot use them
             // do not change anything here
             Msg_type=Transceiver::DGT_SERVICE;
             // notice: 1st Service datagram has no contents
         }
 
-        // digitalWrite(SCOPE_GPIO, HIGH);
+        // send the datagram
         result=send();
-        // digitalWrite(SCOPE_GPIO, LOW);
+
 #ifdef DEBUG_PRINT_MSG_DATAGRAMS
         dbprint("Msg: ");
         Transceiver_obj.PrintMsgDatagram(Transceiver_obj.Msg_Datagram);
@@ -199,28 +249,21 @@ void loop() {
 
 #ifdef DEBUG_PRINT_MSG_DATAGRAMS
         else
-            dbprintln("Transmission error");
+            dbprintln("no ACK");
 #endif
         //dbprintf("Send time=%lu\n", micros() - start_timer);
     }
 
     if (Tx_state==MULTIFREQ) {
         if (RunLedEnabled)
-            BlinkLed(RUNLED_GPIO, 1000, 20, false);
-
+            BlinkLed(RUNLED_GPIO, 2000, 20, false); // short flash once / every 2 seconds (0.5 Hz)
         if (!result)
-            FlashLed(ERRLED_GPIO, 20); // turn on ERRLED_GPIO
+            FlashLed(ERRLED_GPIO, 20); // ACK datagram not received : turn on ERRLED_GPIO
         else
             FlashLed(ERRLED_GPIO); // refresh ERRLED_GPIO 
     }
-    else {
-        if (RunLedEnabled) {
-            if (PairingInProgress)
-                BlinkLed(RUNLED_GPIO, 3000, 1000, false);
-            else
-                BlinkLed(RUNLED_GPIO, 100, 50, false);
-        }
-    }
+    else if (RunLedEnabled)
+        BlinkLed(RUNLED_GPIO, 500, 200, false); // longer flash twice / second (2 Hz)
 }
 
 // Return value: 
@@ -229,9 +272,18 @@ void loop() {
 bool send(void) {
     bool retval=true;
     static uint16_t Multifreq_number=0; // we'll start frequency hopping *after* sending this datagram
-    static uint16_t Session_key=GetRandomInt16(); // random seed used to generate the RF24Channels[] array
     static unsigned long Stat_time=0; // to compute error statistics every second
     static uint16_t Error_counter=0;  // number of transmission errors per second, updated once/second
+    static bool Pairing_complete=false;
+    
+    unsigned long time_now_ms=millis();
+    static unsigned long Sig_timer=0; // to print "no signal" warning every second
+
+    if (time_now_ms >= Sig_timer+1000) {
+        dbprintf("(ch 0x%02x) tx_device_id=0x%06x rx_device_id=0x%06x dg_number=%u no signal\n",
+            Transceiver_obj.GetChannel(), Settings_obj.GetTxDeviceId(), Settings_obj.GetRxDeviceId(), Transceiver_obj.Msg_Datagram.number);
+        Sig_timer=time_now_ms;
+    }
 
     if (Tx_state==MULTIFREQ) {
         // clear error statistics every second
@@ -243,64 +295,69 @@ bool send(void) {
     }
 
     retval=Transceiver_obj.Send(Msg_type, Msg_message);
-    
-    if (retval && Transceiver_obj.Ack_Datagram.type & Transceiver::DGT_SERVICE) {
-        if (PairingInProgress) {
-            if (Transceiver_obj.Ack_Datagram.type & Transceiver::DGT_PAIRING_COMPLETE) {
-                dbprintln("Pairing complete, rebooting");
-                EndProgram(true); // reset command
+    if (retval) {
+        Sig_timer=time_now_ms; // to print "no signal" warning every second
+
+        if (Transceiver_obj.Ack_Datagram.type & Transceiver::DGT_SERVICE) {
+            if ((Transceiver_obj.Ack_Datagram.type & Transceiver::DGT_SYNCHRONIZED) && Multifreq_number==0) {
+                // we received the first datagram telling us Rx is synchronized
+                Multifreq_number=Transceiver_obj.Ack_Datagram.message[0];
+                dbprintf("synchronized after %lu ms\n", millis());
+            }
+            if (Transceiver_obj.Ack_Datagram.type & Transceiver::DGT_PAIRING && PairingInProgress && !Pairing_complete) {
+                // we received the first datagram telling us Rx is paired
+                Pairing_complete=true; // the receiver has acquired our configuration settings
+                dbprintln("Pairing complete");
             }
         }
-        else if ((Transceiver_obj.Ack_Datagram.type & Transceiver::DGT_SYNCHRONIZED) && Multifreq_number==0) {
-            // we received the first datagram telling us Rx is synchronized
-            Multifreq_number=Transceiver_obj.Ack_Datagram.message[0];
-            dbprintf("synchronized after %lu ms\n", millis());
-        }
     }
-
     if (Tx_state==MONOFREQ) {
-        if (!PairingInProgress && Multifreq_number && Transceiver_obj.Msg_Datagram.number==Multifreq_number) {
-            // we have sent the last datagram of the synchronized sequence : switch to MULTIFREQ
+        if (Multifreq_number && Transceiver_obj.Msg_Datagram.number==Multifreq_number) {
+            // we have sent the last datagram of the synchronized sequence
+            if (Pairing_complete) {
+                dbprintln("Reboot after pairing");
+                EndProgram(true); // reset command
+            }
+            //switch to MULTIFREQ
             Tx_state=MULTIFREQ;
             dbprintf("MULTIFREQ after %lu ms, period=%lu µs (%u dg/s)\n", millis(), DGPERIOD, (unsigned int)(1000000/DGPERIOD));
-            // assign values to the array of radio channels
-            Transceiver_obj.SetSessionKey(Session_key);
-            Transceiver_obj.AssignChannels();
-#ifdef DEBUG_RANDOM_DISCONNECT
-            uint16_t debug_disconnection_seed=GetRandomInt16();
-            dbprintf("debug: random disconnection seed=%u\n", debug_disconnection_seed);
-            randomSeed(debug_disconnection_seed);
-#endif
         }
         else {
             // Send configuration settings to the receiver
             // Tx stays in MONOFREQ until the synchronized sequence is complete or while pairing in progress, sending these DGT_SERVICE datagrams
             // Tx sends these DGT_SERVICE datagrams while Tx_state=MONOFREQ
-            static uint16_t device_id=(uint16_t)Settings_obj.GetDeviceId();
-            static uint16_t mono_channel=(uint16_t)Settings_obj.GetMonoChannel();
+            static uint16_t tx_device_id=Settings_obj.GetTxDeviceId();
+            static uint16_t rx_device_id=Settings_obj.GetRxDeviceId();
+            static uint16_t mono_channel=Settings_obj.GetMonoChannel();
             memset(Msg_message, 0, sizeof(Msg_message));
-            Msg_message[0]=device_id;
-            Msg_message[1]=mono_channel;
-            Msg_message[2]=read_pa_level_switch(PALEVEL0_GPIO, PALEVEL1_GPIO);
-            Msg_message[3]=Session_key;
+            Msg_message[0]=tx_device_id;
+            Msg_message[1]=rx_device_id;
+            Msg_message[2]=mono_channel;
+            Msg_message[3]=read_pa_level_switch(PALEVEL0_GPIO, PALEVEL1_GPIO);
+            Msg_message[4]=Transceiver_obj.GetSessionKey();
             Msg_type=Transceiver::DGT_SERVICE;
-
+#if DEBUG_ON
+            /*
             static micros_t Debug_config_settings_printed_time=0;
             if (millis()>=Debug_config_settings_printed_time+1000) {
-                dbprintf("Sending device_id=x%04x mono_channel=x%04x pa_level=%04x session_key=x%04x\n", 
+                dbprintf("(ch 0x%02x) tx_device_id=0x%06x rx_device_id=0x%06x  mono_channel=0x%04x pa_level=%04x session_key=0x%04x\n", 
+                    Transceiver_obj.GetChannel(),
                     Msg_message[0],
                     Msg_message[1],
                     Msg_message[2],
-                    Msg_message[3]);
+                    Msg_message[3],
+                    Msg_message[4]);
                 Debug_config_settings_printed_time=millis();
             }
+            */
+#endif
         }
     }
     if (Tx_state==MULTIFREQ) {
         if (!retval)
             Error_counter++;
 
-        // number of consecutive missing ACK datagrams while MULTIFREQ: we reset the MCU if this counter reaches COM_TRANS_ERRORS
+        /*/ number of consecutive missing ACK datagrams while MULTIFREQ: we reset the MCU if this counter reaches COM_TRANS_ERRORS
         static uint16_t Reset_counter=0;
         if (retval)
             Reset_counter=0;
@@ -313,7 +370,7 @@ bool send(void) {
                 dbprintf("Reboot after %d consecutive missed ACK datagrams\n", COM_TRANS_ERRORS);
                 EndProgram(true); // reset command
             }
-        }
+        } */
     
         Msg_type=Transceiver::DGT_USER;
 
@@ -335,27 +392,22 @@ bool send(void) {
             // reconfigure the transceiver for pairing
             dbprintln("Pairing");
             PairingInProgress=true;
-            Transceiver_obj.HotConfig(true, Transceiver::DEF_TXID, Transceiver::DEF_MONOCHAN, Transceiver::DEF_PALEVEL);
+            Transceiver_obj.Setup(true, Transceiver::DEF_TXID, Transceiver::DEF_RXID, Transceiver::DEF_MONOCHAN, Transceiver::DEF_PALEVEL);
         }
     }
-#ifdef DEBUG_RANDOM_DISCONNECT
-    // reset randomly to simulate connection loss
-    if (random(240000)<10) {
-        // probability 1/240000 ~ 1 per 20 minutes on average at 100 dg/s = 1 / (240000 / 100 / (60 * 2))
-        dbprintf("debug: random reboot after %lu minutes\n", millis()/60000);
-        dbprintln("----------------------------------------");
-        EndProgram(true); // reset command
-    }
-#endif
      return retval;
 }
 
 // RF output level is hardware-encoded with 2 GPIOs
 // 2 bits give 4 possible values: 11=RF24_PA_MIN (0), 10=RF24_PA_LOW (1), 01=RF24_PA_HIGH (2), 00=RF24_PA_MAX (3)
 int read_pa_level_switch(uint8_t bit0_gpio, uint8_t bit1_gpio) {
+    //trprintf("*** %s %s() begin\n", __FILE_NAME__, __FUNCTION__);
+	int retval=-1;
 	uint8_t bit0=digitalRead(bit0_gpio)==HIGH?1:0;
 	uint8_t bit1=digitalRead(bit1_gpio)==HIGH?1:0;
 	uint8_t idx=(2*bit1)+bit0;
 	int pa_values[]={RF24_PA_MAX, RF24_PA_HIGH, RF24_PA_LOW, RF24_PA_MIN};
-	return pa_values[idx];
+	retval=pa_values[idx];
+    //trprintf("*** %s %s() returns %d\n", __FILE_NAME__, __FUNCTION__, retval);
+    return retval;
 }

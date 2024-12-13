@@ -25,3 +25,5 @@ void UserLoopAck(uint16_t *message);
 #define USR_CHAN4_GPIO 26 // connected to Servo #4
 #define USR_CHAN5_GPIO 27 // connected to Led1
 #define USR_CHAN6_GPIO 14 // connected to Led2
+#define USR_CHAN7_GPIO 12 // possible additional channel
+#define USR_CHAN8_GPIO 13 // possible additional channel

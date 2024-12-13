@@ -17,6 +17,12 @@
 #include "Gpio.h"
 #include <bootloader_random.h> // for GetRandomInt32()
 
+// 0=debug off, 1=output to serial, 2=output to serial and optionally bluetooth with dbtprintln()
+#define DEBUG_ON 1
+// 0=trace off, 1=output to serial, 2=output to serial and optionally bluetooth with trbtprintln()
+#define TRACE_ON 0
+#include <rgDebug.h>
+
 // Blink the led, non blocking call : call it repeatedly
 // this function can deal only with a single led
 // period : time the led is on + time the led is off, in ms
@@ -93,6 +99,11 @@ void EndProgram(bool reset) {
 				delay(HALTED_DELAY*1000);
 		}
 	}
+}
+
+void EndProgram(bool error_condition, const char *error_message) {
+	if (error_condition)
+		dbprintln(error_message);
 }
 
 // get a secure random number from the ESP32 hardware random number generator

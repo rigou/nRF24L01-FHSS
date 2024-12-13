@@ -39,15 +39,6 @@
 
 #define POWERSENSOR_GPIO 4 // battery voltage sensor used only in Rx/User.cpp for now, will be implemented in Tx later
 
-// GPIOs used only by Tx -----------------------------
-
-// RF output level is hardware-encoded by 2 GPIOs : nc=not connected, gnd=connected to common ground
-// 	 GPIO	PA_MIN	PA_LOW	PA_HIGH	PA_MAX
-// PALEVEL0	  nc	 gnd	  nc	  gnd
-// PALEVEL1   nc	 nc	  	  gnd	  gnd
-#define PALEVEL0_GPIO 12
-#define PALEVEL1_GPIO 14
-
 // User-defined GPIOs --------------------------------------
 //
 // see Tx/User.h and Rx/User.h

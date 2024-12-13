@@ -55,7 +55,7 @@
 // 	This delay is critical it must be larger than the normal MSG datagram (from Tx to Rx) transmission time + ACK datagram (from Rx to Tx) receiving time
 // 	ART_DELAY: 0=250µs, 1=500µs, 2=750µs, 3=1000µs, 4=1250µ, 5=1500µs, ... 15=4000µs
 // 	ART_DELAY=3 is ok for COM_TRANS_DGS=100,  MSGVALUES=10 ACKVALUES=5 CPUFREQ=80 DATARATE=250KBPS
-#define COM_ART_DELAY   3
+#define COM_ART_DELAY   5
 //
 // ART_ATTEMPTS:
 // 	To reduce the transmission error rate, set ART_ATTEMPTS between 1 and 15
@@ -64,26 +64,11 @@
 // 	Alternatively, if transmission errors are acceptable then set ART_ATTEMPTS=0 to disable auto retransmission entirely
 #define COM_ART_ATTEMPTS 0
 
-// Debug settings ----------------------------------------
-
-// 0=debug off, 1=debug to serial, 2=debug to serial and optionally bluetooth with dbtprintln()
-#define DEBUG_ON 1
-
-// all debug output is handled with these macros, Serial is never called directly for debug tracing
-#if DEBUG_ON
-#define dbprint(...)   Serial.print(__VA_ARGS__)
-#define dbprintln(...) Serial.println(__VA_ARGS__)
-#define dbprintf(...)  Serial.printf(__VA_ARGS__)
-#else
-#define dbprint(...)
-#define dbprintln(...)
-#define dbprintf(...)
-#endif
-
 // Common library -----------------------------------------
 
 void BlinkLed(uint8_t led_gpio, unsigned int period, unsigned int time_on, bool restart);
 void FlashLed(uint8_t led_gpio, unsigned int time_on=0);
 void EndProgram(bool reset);
+void EndProgram(bool error_condition, const char *error_message);
 uint32_t GetRandomInt32(void);
 uint16_t GetRandomInt16(void);

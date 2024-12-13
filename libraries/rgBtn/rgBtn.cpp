@@ -7,7 +7,7 @@
  * Installation, usage : https://github.com/rigou/nRF24L01-FHSS/
 */
 
-#include "rgButton.h"
+#include "rgBtn.h"
 
 // this is a non-blocking function : call it repeatedly
 // if button is released it returns BTN_RELEASED

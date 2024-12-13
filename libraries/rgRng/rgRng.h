@@ -13,7 +13,7 @@
 
 #include <stdint.h>
 
-#define RNGLIB_NAME	"Rng" // spaces not permitted
+#define RNGLIB_NAME	"rgRng" // spaces not permitted
 #define RNGLIB_VERSION	"v1.1.2"
 
 class rgRng {

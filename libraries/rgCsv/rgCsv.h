@@ -17,7 +17,7 @@
 #include <LittleFS.h>
 
 #define CSVLIB_NAME	"rgCsv" // spaces not permitted
-#define CSVLIB_VERSION	"v1.2.2"
+#define CSVLIB_VERSION	"v1.5.0"
 
 /*******************************************
 * How to emulate library rgParam with rgCsv
@@ -41,7 +41,9 @@ Declare this in your sketch:
 	rgCsv ParamCsv_obj;
 
 	// you can use these macros to simplify access to the mCells array of ParamCsv_obj
-	#define PARAMGETINT(x)		GetIntCell(byte(Paramid::x),1)
+	#define PARAMGETSTR(x)		GetStrCell((byte)Paramid::x, 0)
+	#define PARAMSETSTR(x,v)	SetStrCell((byte)Paramid::x, 0, (v))
+	#define PARAMGETINT(x)		GetIntCell((byte)Paramid::x, 1)
 	#define PARAMSETINT(x,v)	SetIntCell((byte)Paramid::x, 1, (v))
 */
 
@@ -67,12 +69,12 @@ class rgCsv {
 		int read_line(File *file_obj, int buffer_size_int, char *buffer_out_str);
 
 	public:
-		int Open(const char *path_str, int maxlines_int, int maxcells_int, int maxcellen_int);
-		void Close(void);
+		int Allocate(const char *path_str, int maxlines_int, int maxcells_int, int maxcellen_int, bool create_bool);
+		void Release(void);
 		int Load(void);
-		int Save(void);
-		int GetIntCell(byte line_int, byte column_int);
-		int SetIntCell(byte line_int, byte column_int, int new_value_int);
+		int Save(int lines_int=0);
+		int16_t GetIntCell(byte line_int, byte column_int);
+		int SetIntCell(byte line_int, byte column_int, int16_t new_value_int);
 		const char *GetStrCell(byte line_int, byte column_int);
 		int SetStrCell(byte line_int, byte column_int, const char *new_value_str);
 };
