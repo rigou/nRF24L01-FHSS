@@ -1,5 +1,5 @@
 #!/bin/bash
 
-SRCDIR="/$HOME/Arduino/libraries/"
+SRCDIR="/$HOME/Projects/Arduino/libraries"
 cd "$(dirname $0)"
-rsync -rva $SRCDIR/rgBtn  $SRCDIR/rgCsv  $SRCDIR/rgRng .
+rsync -rva $SRCDIR/rgBtn  $SRCDIR/rgCsv  $SRCDIR/rgDebug  $SRCDIR/rgRng  $SRCDIR/rgStr .

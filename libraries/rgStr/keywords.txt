@@ -1,0 +1,20 @@
+#######################################
+# Classes, datatypes (KEYWORD1)
+#######################################
+
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+Isblank	KEYWORD2
+TrimCommentAndWhitespace	KEYWORD2
+TrimWhitespace	KEYWORD2
+TimeString	KEYWORD2
+ishexdigit	KEYWORD2
+Hex2Dec	KEYWORD2
+BinStr	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
