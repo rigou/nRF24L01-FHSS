@@ -84,7 +84,7 @@ void EndProgram(bool reset) {
 		// this point is never reached
 	}
 	else {
-		const int HALTED_DELAY=10000; // ms
+		const int HALTED_DELAY=60000; // ms
 		while (1) {
 			dbprintln("Program halted");
 			if (ERRLED_GPIO) {

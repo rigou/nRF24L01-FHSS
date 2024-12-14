@@ -21,21 +21,18 @@
 
 // size of the user data (uint16_t) transmitted  by Tx to Rx, min=4, max=14
 // more data takes longer to transmit, implying less time available for your processing in User.cpp
+// see structure of MsgDatagram in Transceiver.h
 #define COM_MSGVALUES   6   // 6 because our example code demonstrates a 6-channels RC transmitter
 
 // size of the user data (uint16_t) transmitted  by Rx to Tx, min=1, max=14 
 // more data takes longer to transmit, implying less time available for your processing in User.cpp
-#define COM_ACKVALUES   2   // 2 because our example code puts an error counter and a voltage sensor value in the ACK datagrams
+#define COM_ACKVALUES   2   // see structure of AckDatagram in Transceiver.h
 
 // B. User *may* modify the following values if he knows what he is doing :
 
 // number of datagram transmitted by Tx to Rx per second, must be multiple of 10. Default is 100.
 // more datagrams transmitted per second implies less time available for your processing in User.cpp
 #define COM_TRANS_DGS   100
-
-// reset MCU if we counted COM_TRANS_ERRORS consecutive missing datagrams
-// 0 = never reset
-#define COM_TRANS_ERRORS 200
 
 // highest radio channel value allowed in your country
 // your local laws may not allow the full frequency range (authorized frequencies in France: 2400-2483.5 MHz)

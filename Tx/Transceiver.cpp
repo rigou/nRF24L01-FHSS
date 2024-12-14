@@ -49,8 +49,7 @@ bool Transceiver::Setup(bool is_tx, uint16_t tx_device_id, uint16_t rx_device_id
 #endif
 		return false;
 	}
-
-    setupScope();
+	setupScope();
 
 	// Set the RF power output and Enable the LNA (Low Noise Amplifier) Gain
 	Radio_obj.setPALevel(pa_level, true);

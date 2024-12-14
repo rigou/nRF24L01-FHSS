@@ -46,7 +46,11 @@ class Transceiver {
         static const uint8_t DGT_SYNCHRONIZED=0x4;
         static const uint8_t DGT_PAIRING=0x8;
      
-        static const uint8_t MSGVALUES=COM_MSGVALUES; // min=5, max=14 (5 values are used by service datagrams sent by Tx while running in MONOFREQ mode)
+        /* MSGVALUES min=5, max=14 (5 values are used by service datagrams sent by Tx while running in MONOFREQ mode)
+            Tx_state = MONOFREQ :   dg_number T1 tx_id rx_id channel pa_level session_key
+            Tx_state = MULTIFREQ :  dg_number T2 chan1 chan2 chan3 chan4 chan5 chan6
+        */
+        static const uint8_t MSGVALUES=COM_MSGVALUES;
         struct MsgDatagram {
             uint16_t number; // 0 - 65535
             uint16_t type;  // see above
@@ -54,7 +58,12 @@ class Transceiver {
         };
         MsgDatagram Msg_Datagram; // sent from Tx -> Rx
 
-        static const uint8_t ACKVALUES=COM_ACKVALUES; // min=1, max=14 (message[0] is used by ACK datagrams sent by Rx with status DGT_SYNCHRONIZED)
+        /* ACKVALUES min=1, max=14
+            Rx_state = SYNCHRONIZING :  dg_number T1 0x0000 0x0000
+            Rx_state = MONOFREQ :       dg_number T5 multifreq_number session_key
+            Rx_state = MULTIFREQ :      dg_number T2 error_counter voltage
+        */
+        static const uint8_t ACKVALUES=COM_ACKVALUES;
         struct AckDatagram {
             uint16_t number; // 0 - 65535
             uint16_t type;  // see above

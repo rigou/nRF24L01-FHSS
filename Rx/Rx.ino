@@ -13,12 +13,12 @@
 * made inoperable by subsequent releases of the project.
 ******************************************************************************/
 
+#include <rgBtn.h>
+#include <rgCsv.h>
 #include "Common.h"
 #include "Gpio.h"
 #include "Settings.h"
 #include "Transceiver.h"
-#include <rgBtn.h>
-#include <rgCsv.h>
 #include "User.h"
 
 // 0=debug off, 1=output to serial, 2=output to serial and optionally bluetooth with dbtprintln()
@@ -31,7 +31,7 @@ Settings Settings_obj;
 Transceiver Transceiver_obj;
 
 #define APP_NAME "BasicRx"
-#define APP_VERSION "1.9.0"
+#define APP_VERSION "1.9.1"
 
 // Debug stuff
 //
@@ -61,14 +61,12 @@ const uint8_t SYNACKNUMBER=64;
 void setup() {
     Serial.begin(115200);
     while (!Serial) ; // wait for serial port to connect
-// #if DEBUG_ON
-// 	dbprint('\n'); for (uint8_t idx = 0; idx<6; idx++) { dbprint((char)('A'+idx)); delay(500); }
-// #endif
+#if DEBUG_ON
+	dbprint('\n'); for (uint8_t idx = 0; idx<6; idx++) { dbprint((char)('A'+idx)); delay(500); }
+#endif
     dbprintf("\n\n*** %s %s() : %s %s\n", __FILE_NAME__, __FUNCTION__, APP_NAME, APP_VERSION);
     dbprintf("using library %s %s\n", BTNLIB_NAME, BTNLIB_VERSION);
     dbprintf("using library %s %s\n", CSVLIB_NAME, CSVLIB_VERSION);
-    //dbprintf("using library %s %s\n", RNGLIB_NAME, RNGLIB_VERSION);
-    //dbprintf("using library %s %s\n", STRLIB_NAME, STRLIB_VERSION);
     pinMode(PAIRING_GPIO, INPUT_PULLUP);
     if (RUNLED_GPIO)
         pinMode(RUNLED_GPIO, OUTPUT);
@@ -230,6 +228,7 @@ uint8_t receive(void) {
                 if (pairing_in_progress)
                     Ack_type|=Transceiver::DGT_PAIRING;
                 Ack_message[0]=Multifreq_number;
+                Ack_message[1]=Transceiver_obj.GetSessionKey(); // $$DEBUG
             }
             else {
                 // MULTIFREQ
@@ -272,15 +271,6 @@ uint8_t receive(void) {
                     uint16_t mono_channel=Transceiver_obj.Msg_Datagram.message[2];
                     uint16_t pa_level=Transceiver_obj.Msg_Datagram.message[3];
                     uint16_t session_key=Transceiver_obj.Msg_Datagram.message[4];
-                    /*
-                    dbprintf("(ch 0x%02x) Received tx_device_id=0x%06x rx_device_id=0x%06x mono_channel=0x%06x pa_level=%04x session_key=0x%04x\n", 
-                        Transceiver_obj.GetChannel(),
-                        Transceiver_obj.Msg_Datagram.message[0],
-                        Transceiver_obj.Msg_Datagram.message[1],
-                        Transceiver_obj.Msg_Datagram.message[2],
-                        Transceiver_obj.Msg_Datagram.message[3],
-                        Transceiver_obj.Msg_Datagram.message[4]);
-                    */
                     // Register the session key in RAM in order to use it later for frequency hopping
                     Transceiver_obj.SetSessionKey(session_key); // random seed used to generate the RF24Channels[] array
                     Transceiver_obj.AssignChannels(); // assign values to the array of radio channels

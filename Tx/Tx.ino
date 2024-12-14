@@ -40,12 +40,12 @@
 * made inoperable by subsequent releases of the project.
 ******************************************************************************/
 
+#include <rgBtn.h>
+#include <rgCsv.h>
 #include "Common.h"
 #include "Gpio.h"
 #include "Settings.h"
 #include "Transceiver.h"
-#include <rgBtn.h>
-#include <rgCsv.h>
 #include "User.h"
 
 // 0=debug off, 1=output to serial, 2=output to serial and optionally bluetooth with dbtprintln()
@@ -58,10 +58,9 @@ Settings Settings_obj;
 Transceiver Transceiver_obj;
 
 #define APP_NAME "BasicTx"
-#define APP_VERSION "1.9.0"
+#define APP_VERSION "1.9.1"
 
 // Debug stuff
-//
 // Printing datagrams consumes 2300 µs
 //#define DEBUG_PRINT_MSG_DATAGRAMS 
 //#define DEBUG_PRINT_ACK_DATAGRAMS
@@ -98,9 +97,9 @@ void ARDUINO_ISR_ATTR onTimer(){
 void setup() {
     Serial.begin(115200);
     while (!Serial) ; // wait for serial port to connect
-// #if DEBUG_ON
-// 	dbprint('\n'); for (uint8_t idx = 0; idx<6; idx++) { dbprint((char)('A'+idx)); delay(500); }
-// #endif
+#if DEBUG_ON
+	dbprint('\n'); for (uint8_t idx = 0; idx<6; idx++) { dbprint((char)('A'+idx)); delay(500); }
+#endif
     dbprintf("\n\n*** %s %s() : %s %s\n", __FILE_NAME__, __FUNCTION__, APP_NAME, APP_VERSION);
     dbprintf("using library %s %s\n", BTNLIB_NAME, BTNLIB_VERSION);
     dbprintf("using library %s %s\n", CSVLIB_NAME, CSVLIB_VERSION);
@@ -176,6 +175,7 @@ void setup() {
 
     // assign values to the array of radio channels
     Transceiver_obj.SetSessionKey(GetRandomInt16()); // random seed used to generate the RF24Channels[] array
+    //dbprintf("setup() SessionKey 0x%04x\n", Transceiver_obj.GetSessionKey());
     Transceiver_obj.AssignChannels();
 
     // clear data in the MSG message buffer : datagram number 0 will contain only zeros
@@ -238,13 +238,13 @@ void loop() {
                 UserLoopAck(Transceiver_obj.Ack_Datagram.message);
             }
         }
-
 #ifdef DEBUG_PRINT_ACK_DATAGRAMS
         else
             dbprintln("no ACK");
 #endif
         //dbprintf("Send time=%lu\n", micros() - start_timer);
     }
+        
 
     if (Tx_state==MULTIFREQ) {
         if (RunLedEnabled)
@@ -289,14 +289,14 @@ bool send(void) {
     retval=Transceiver_obj.Send(Msg_type, Msg_message);
     if (retval) {
         Sig_timer=time_now_ms; // to print "no signal" warning every second
-
-        if (Transceiver_obj.Ack_Datagram.type & Transceiver::DGT_SERVICE) {
-            if ((Transceiver_obj.Ack_Datagram.type & Transceiver::DGT_SYNCHRONIZED) && Multifreq_number==0) {
+        Transceiver::AckDatagram *ack_dg=&Transceiver_obj.Ack_Datagram; // shortcut
+        if (ack_dg->type & Transceiver::DGT_SERVICE) {
+            if ((ack_dg->type & Transceiver::DGT_SYNCHRONIZED) && ack_dg->message[1]==Transceiver_obj.GetSessionKey() && Multifreq_number==0) {
                 // we received the first datagram telling us Rx is synchronized
-                Multifreq_number=Transceiver_obj.Ack_Datagram.message[0];
+                Multifreq_number=ack_dg->message[0];
                 dbprintf("synchronized after %lu ms\n", millis());
             }
-            if (Transceiver_obj.Ack_Datagram.type & Transceiver::DGT_PAIRING && PairingInProgress && !Pairing_complete) {
+            if (ack_dg->type & Transceiver::DGT_PAIRING && PairingInProgress && !Pairing_complete) {
                 // we received the first datagram telling us Rx is paired
                 Pairing_complete=true; // the receiver has acquired our configuration settings
                 dbprintln("Pairing complete");
@@ -328,21 +328,6 @@ bool send(void) {
             Msg_message[3]=read_pa_level_switch(PALEVEL0_GPIO, PALEVEL1_GPIO);
             Msg_message[4]=Transceiver_obj.GetSessionKey();
             Msg_type=Transceiver::DGT_SERVICE;
-#if DEBUG_ON
-            /*
-            static micros_t Debug_config_settings_printed_time=0;
-            if (millis()>=Debug_config_settings_printed_time+1000) {
-                dbprintf("(ch 0x%02x) tx_device_id=0x%06x rx_device_id=0x%06x  mono_channel=0x%04x pa_level=%04x session_key=0x%04x\n", 
-                    Transceiver_obj.GetChannel(),
-                    Msg_message[0],
-                    Msg_message[1],
-                    Msg_message[2],
-                    Msg_message[3],
-                    Msg_message[4]);
-                Debug_config_settings_printed_time=millis();
-            }
-            */
-#endif
         }
     }
     if (Tx_state==MULTIFREQ) {
