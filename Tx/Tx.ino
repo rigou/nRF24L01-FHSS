@@ -32,15 +32,7 @@
  * type Ctrl-A N    to prefix each line with a timestamp
  * type Ctrl-A Z    to display minicom menu
  * type Ctrl-A X    to quit
- *
- * This program is published under the GNU General Public License. 
- * This program is free software and you can redistribute it and/or modify it under the terms
- * of the GNU General  Public License as published by the Free Software Foundation, version 3.
- * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY.
- * See the GNU General Public License for more details : https://www.gnu.org/licenses/ *GPL 
- *
- * Installation, usage : https://github.com/rigou/nRF24L01-FHSS/
-*/
+ */
 
 /******************************************************************************
 * WARNING: This file is part of the nRF24L01-FHSS project base code
@@ -65,7 +57,7 @@
 Settings Settings_obj;
 Transceiver Transceiver_obj;
 
-#define APP_NAME "Tx"
+#define APP_NAME "BasicTx"
 #define APP_VERSION "1.9.0"
 
 // Debug stuff
@@ -123,7 +115,7 @@ void setup() {
 
     // mount the file system, format it if not already done
     if (!LittleFS.begin(true))
-        EndProgram(true, "Init: file system formatting error");
+        EndProgram(true, "Setup: file system formatting error");
 
     // Hold the Pairing button during boot to delete the settings file
     const int BUTTON_HOLD=3000; // ms, hold the button long enough to create a new file with default values
@@ -142,7 +134,7 @@ void setup() {
     // Open the settings file, create it if it does not exist
     // default values are provided only for creating the settings file
     if (Settings_obj.Init(Transceiver::DEF_TXID, Transceiver::DEF_RXID, Transceiver::DEF_MONOCHAN, Transceiver::DEF_PALEVEL))
-        EndProgram(true, "Init: Settings file error");
+        EndProgram(true, "Setup: Settings file error");
 
     // read the transceiver settings from the settings file
     int tx_device_id=Settings_obj.GetTxDeviceId();
@@ -247,7 +239,7 @@ void loop() {
             }
         }
 
-#ifdef DEBUG_PRINT_MSG_DATAGRAMS
+#ifdef DEBUG_PRINT_ACK_DATAGRAMS
         else
             dbprintln("no ACK");
 #endif
@@ -357,28 +349,14 @@ bool send(void) {
         if (!retval)
             Error_counter++;
 
-        /*/ number of consecutive missing ACK datagrams while MULTIFREQ: we reset the MCU if this counter reaches COM_TRANS_ERRORS
-        static uint16_t Reset_counter=0;
-        if (retval)
-            Reset_counter=0;
-        else {
-            // reset if we counted COM_TRANS_ERRORS consecutive missing ACK datagrams
-            Reset_counter++;
-            if (COM_TRANS_ERRORS && Reset_counter==COM_TRANS_ERRORS) {
-                // Rx setup() execution time : 205 ms
-                // Tx setup() execution time : 165 ms
-                dbprintf("Reboot after %d consecutive missed ACK datagrams\n", COM_TRANS_ERRORS);
-                EndProgram(true); // reset command
-            }
-        } */
-    
         Msg_type=Transceiver::DGT_USER;
 
         // switch to next radio channel
         Transceiver_obj.SetChannel(Transceiver_obj.Msg_Datagram.number+1);
     }
 
-    // check actions on the Pairing button
+    // check actions on the Pairing button while in MONOFREQ
+    // pressing the Pairing button while in MULTIFREQ has no effect
     if (Tx_state==MONOFREQ) { // else already paired
         BtnStates btn_state=ReadBtn(PAIRING_GPIO, RUNLED_GPIO, 1500);
         RunLedEnabled=(btn_state==BTN_RELEASED); // if btn_state==BTN_PRESSED then read_button() will control the Led

@@ -30,7 +30,7 @@
 Settings Settings_obj;
 Transceiver Transceiver_obj;
 
-#define APP_NAME "Rx"
+#define APP_NAME "BasicRx"
 #define APP_VERSION "1.9.0"
 
 // Debug stuff
@@ -78,7 +78,7 @@ void setup() {
 
     // mount the file system, format it if not already done
     if (!LittleFS.begin(true))
-		EndProgram(true, "Init: file system formatting error");
+		EndProgram(true, "Setup: file system formatting error");
 
     // Hold the Pairing button during boot to delete the current settings file.
     const int BUTTON_HOLD=3000; // ms, hold the button long enough to create a new file with default values
@@ -98,7 +98,7 @@ void setup() {
     // these parameters will make us enter the pairing mode automatically
     // after synchronization is complete, without further action on the Pairing button 
     if (Settings_obj.Init(Transceiver::DEF_TXID, Transceiver::DEF_RXID, Transceiver::DEF_MONOCHAN, Transceiver::DEF_PALEVEL)!=0)
-        EndProgram(true, "Init: Settings file error");
+        EndProgram(true, "Setup: Settings file error");
 
     // read the transceiver settings from the settings file
     int tx_device_id=Settings_obj.GetTxDeviceId();
@@ -245,16 +245,7 @@ uint8_t receive(void) {
         // not received
         if ((Rx_state==MONOFREQ || Rx_state==MULTIFREQ)) {
             if (time_now_us>=Next_Eta_us+(Transceiver_obj.Avg_Datagram_Period/2)) {
-                //dbprintf("Mis: n=%05u, timeout=%d\n", expected_number, time_now_us-Next_Eta_us);
-                /*if (Rx_state==MULTIFREQ) {
-                    // reset if we counted COM_TRANS_ERRORS consecutive missing datagrams
-                    Reset_counter++;
-                    if (COM_TRANS_ERRORS && Reset_counter==COM_TRANS_ERRORS) {
-                        dbprintf("Reboot after %d consecutive missed MSG datagrams\n", COM_TRANS_ERRORS);
-                        EndProgram(false); // true=reset command
-                    }
-                } */
-               
+                //dbprintf("Mis: n=%05u, timeout=%d\n", expected_number, time_now_us-Next_Eta_us);               
                 // timeout : increment Next_Eta_us blindly
                 Next_Eta_us+=Transceiver_obj.Avg_Datagram_Period;
                 Prev_number++;
